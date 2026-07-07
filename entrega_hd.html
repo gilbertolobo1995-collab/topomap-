@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Entrega de HD - TopoMap</title>
+    
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 15px; padding-bottom: 80px; background-color: #f4f6f8; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        h2 { text-align: center; color: #1a73e8; margin-top: 0; font-size: 20px; }
+        label { font-weight: bold; display: block; margin-top: 15px; color: #444; font-size: 14px; }
+        input, select { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; font-family: inherit; }
+        input:disabled { background-color: #f0f0f0; color: #555; }
+        
+        .box-import { background: #e8f0fe; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: none; }
+        .box-import label { color: #1565c0; margin-top: 0; }
+        .box-import input { background: white; }
+
+        .area-card { background: #fafafa; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-top: 15px; position: relative; }
+        .area-card .row { display: flex; gap: 10px; }
+        .area-card .row > div { flex: 1; }
+        .btn-remover { background: #ff4d4d; color: white; border: none; padding: 8px; width: 100%; font-size: 14px; border-radius: 6px; margin-top: 15px; cursor: pointer; font-weight: bold; }
+        
+        .btn-add { background: #e0e0e0; color: #333; border: 1px dashed #999; padding: 12px; width: 100%; font-size: 15px; border-radius: 8px; margin-top: 15px; font-weight: bold; cursor: pointer; }
+        .btn-add:active { background: #d0d0d0; }
+
+        .btn-copiar { background: #1a73e8; color: white; border: none; padding: 16px; width: 100%; font-size: 16px; border-radius: 8px; margin-top: 25px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; }
+        .btn-copiar:active { background: #1557b0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📦 Entrega de HD/SSD</h2>
+    
+    <div class="box-import" id="boxImportarMapa">
+        <label>⚙️ Importar Banco de Fazendas (.ZIP)</label>
+        <input type="file" id="zipFile" accept=".zip" onchange="importarBancoDeDados()">
+        <small style="color: #555; display: block; margin-top: 5px;">Você ainda não carregou o mapa da usina no seu celular. Carregue o ZIP para liberar as áreas automáticas.</small>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+        <div style="flex: 1;">
+            <label>Dispositivo:</label>
+            <select id="tipo">
+                <option value="HD">HD</option>
+                <option value="SSD">SSD</option>
+                <option value="Cartão SD">Cartão SD</option>
+                <option value="Pendrive">Pendrive</option>
+            </select>
+        </div>
+        <div style="flex: 1;">
+            <label>Nº / Identificação:</label>
+            <input type="text" id="id_hd" placeholder="Ex: 05">
+        </div>
+    </div>
+
+    <label>Entregue na mesa do(a):</label>
+    <input type="text" id="responsavel" placeholder="Ex: Carlos">
+
+    <hr style="border: 0; border-top: 2px solid #eee; margin: 25px 0;">
+    <h3 style="text-align: center; color: #555; margin-top: 0; font-size: 16px;">O QUE TEM NESTE HD?</h3>
+
+    <div id="listaAreas"></div>
+
+    <button class="btn-add" onclick="adicionarNovaArea()">➕ Adicionar Fazenda / Área</button>
+
+    <button class="btn-copiar" id="btnCopiar" onclick="copiarMensagem()">
+        📋 Copiar Mensagem
+    </button>
+</div>
+
+<script>
+    let contadorAreas = 0;
+    let bancoCache = {};
+
+    window.onload = function() {
+        let bancoStr = localStorage.getItem('topo_banco_fazendas_v2');
+        if(!bancoStr) {
+            document.getElementById('boxImportarMapa').style.display = 'block';
+        } else {
+            bancoCache = JSON.parse(bancoStr);
+            adicionarNovaArea();
+        }
+    }
+
+    async function importarBancoDeDados() {
+        const zipFile = document.getElementById('zipFile').files[0];
+        if (!zipFile) return;
+
+        try {
+            const zipBuffer = await zipFile.arrayBuffer();
+            let geojson = await shp(zipBuffer);
+            if (Array.isArray(geojson)) geojson = geojson[0];
+
+            let banco = {};
+            geojson.features.forEach(f => {
+                let p = {};
+                for (let k in f.properties) p[k.toUpperCase()] = f.properties[k];
+
+                let cod = String(p["FAZENDA"] || "").trim();
+                let nome = String(p["PROPRIEDAD"] || "AREA").trim();
+                let gleba = String(p["GLEBA"] || "").trim();
+
+                if(cod !== "") {
+                    if(!banco[cod]) banco[cod] = { nome: nome, glebas: new Set() };
+                    if(gleba !== "") banco[cod].glebas.add(gleba);
+                }
+            });
+
+            for(let cod in banco) {
+                banco[cod].glebas = Array.from(banco[cod].glebas).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            }
+
+            localStorage.setItem('topo_banco_fazendas_v2', JSON.stringify(banco));
+            bancoCache = banco;
+            
+            alert("✅ Banco de Fazendas importado!");
+            document.getElementById('boxImportarMapa').style.display = 'none';
+            
+            if(contadorAreas === 0) adicionarNovaArea();
+
+        } catch (e) {
+            alert("Erro ao ler ZIP do Mapa!");
+        }
+    }
+
+    function gerarOptionsFazendas() {
+        let options = '';
+        let codigos = Object.keys(bancoCache).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        codigos.forEach(c => {
+            options += `<option value="${c}">${c} - ${bancoCache[c].nome}</option>`;
+        });
+        return options;
+    }
+
+    function adicionarNovaArea() {
+        contadorAreas++;
+        let div = document.createElement('div');
+        div.className = 'area-card';
+        div.id = `bloco_${contadorAreas}`;
+
+        div.innerHTML = `
+            <div class="row">
+                <div>
+                    <label style="margin-top:0;">Código:</label>
+                    <select class="sel-cod" onchange="atualizarGlebaArea(${contadorAreas})">
+                        <option value="">Selecione...</option>
+                        ${gerarOptionsFazendas()}
+                    </select>
+                </div>
+                <div>
+                    <label style="margin-top:0;">Gleba:</label>
+                    <select class="sel-gleba">
+                        <option value="">---</option>
+                    </select>
+                </div>
+            </div>
+            
+            <label>Área (Nome):</label>
+            <input type="text" class="input-nome" disabled placeholder="Automático">
+
+            <label>Tipo de Mapeamento:</label>
+            <select class="sel-map">
+                <option value="Mapeamento Cana Soca">Cana Soca</option>
+                <option value="Mapeamento Cana Planta">Cana Planta</option>
+                <option value="Mapeamento Planialtimétrico">Planialtimétrico</option>
+                <option value="Mapeamento de Volumetria">Volumetria</option>
+                <option value="Mapeamento de Daninhas">Daninhas</option>
+            </select>
+
+            <button class="btn-remover" onclick="removerArea(${contadorAreas})">❌ Remover Área</button>
+        `;
+
+        document.getElementById('listaAreas').appendChild(div);
+    }
+
+    function atualizarGlebaArea(id) {
+        let bloco = document.getElementById(`bloco_${id}`);
+        let cod = bloco.querySelector('.sel-cod').value;
+        let selectGleba = bloco.querySelector('.sel-gleba');
+        let inputNome = bloco.querySelector('.input-nome');
+
+        if(!cod) {
+            selectGleba.innerHTML = '<option value="">---</option>';
+            inputNome.value = "";
+            return;
+        }
+
+        let info = bancoCache[cod];
+        inputNome.value = info.nome;
+
+        selectGleba.innerHTML = '<option value="">Qual Gleba?</option>';
+        info.glebas.forEach(g => {
+            selectGleba.innerHTML += `<option value="${g}">Gleba ${g}</option>`;
+        });
+    }
+
+    function removerArea(id) {
+        document.getElementById(`bloco_${id}`).remove();
+    }
+
+    function copiarMensagem() {
+        const tipo = document.getElementById('tipo').value;
+        const id_hd = document.getElementById('id_hd').value.trim();
+        const responsavel = document.getElementById('responsavel').value.trim();
+
+        if (!id_hd || !responsavel) {
+            alert("Preencha o Nº do HD e o Responsável!");
+            return;
+        }
+
+        let textoAreas = "";
+        let temAreaValida = false;
+
+        let blocos = document.querySelectorAll('.area-card');
+        blocos.forEach(bloco => {
+            let cod = bloco.querySelector('.sel-cod').value;
+            let gleba = bloco.querySelector('.sel-gleba').value;
+            let nome = bloco.querySelector('.input-nome').value;
+            let map = bloco.querySelector('.sel-map').value;
+
+            if(cod && gleba) {
+                textoAreas += `${cod} Faz ${nome} G${gleba}\n${map}\n\n`;
+                temAreaValida = true;
+            }
+        });
+
+        if(!temAreaValida) {
+            alert("Você precisa preencher Código e Gleba de pelo menos uma área!");
+            return;
+        }
+
+        const hora = new Date().getHours();
+        let saudacao = "Bom Dia";
+        if (hora >= 12 && hora < 18) {
+            saudacao = "Boa Tarde";
+        } else if (hora >= 18) {
+            saudacao = "Boa Noite";
+        }
+
+        const mensagem = 
+`${saudacao} a todos
+
+Entregue o ${tipo} ${id_hd} com seguinte dados:
+
+Fazendas:
+
+${textoAreas.trim()}
+
+Obs: ${tipo} disponível, encontra-se na mesa do @${responsavel}`;
+
+        // Função visual de Sucesso
+        const mostrarSucesso = () => {
+            let btn = document.getElementById('btnCopiar');
+            let textoOriginal = btn.innerHTML;
+            btn.innerHTML = "✅ Texto Copiado!";
+            btn.style.background = "#25D366";
+            setTimeout(() => {
+                btn.innerHTML = textoOriginal;
+                btn.style.background = "#1a73e8";
+            }, 3000);
+        };
+
+        // Tenta copiar pelo método moderno (Site HTTPS)
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(mensagem).then(mostrarSucesso).catch(() => {
+                usarCopiaAlternativa(mensagem, mostrarSucesso);
+            });
+        } else {
+            // Se estiver offline ou local, usa o Plano B na mesma hora
+            usarCopiaAlternativa(mensagem, mostrarSucesso);
+        }
+    }
+
+    // PLANO B: Método alternativo que dribla o bloqueio local
+    function usarCopiaAlternativa(texto, callbackSucesso) {
+        try {
+            let textArea = document.createElement("textarea");
+            textArea.value = texto;
+            // Esconde o campo de texto da tela
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            let executou = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (executou) {
+                callbackSucesso();
+            } else {
+                alert("Erro. Seu navegador bloqueou totalmente a cópia.");
+            }
+        } catch (err) {
+            alert("Erro. Seu navegador bloqueou totalmente a cópia.");
+        }
+    }
+</script>
+
+</body>
+</html>

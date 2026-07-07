@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TopoMap - Conferência de Terraços</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+    <style>
+        body { margin: 0; font-family: -apple-system, sans-serif; background: #f4f6f8; color: #333; padding-bottom: 20px; }
+        .header { background: linear-gradient(135deg, #0a3d0a, #1b5e20); color: white; padding: 12px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); position: relative; }
+        .header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #fbc02d, #4caf50, #fbc02d); }
+        .header .logo { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .header .brand-name { font-size: 17px; font-weight: 800; letter-spacing: .5px; line-height: 1.1; }
+        .header .brand-sub { font-size: 11.5px; font-weight: 500; opacity: .9; margin-top: 1px; }
+        .container { padding: 15px; max-width: 800px; margin: auto; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .card h3 { margin-top: 0; color: #1a73e8; font-size: 15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; }
+        input[type="text"], input[type="file"], select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #f9f9f9; margin-bottom: 10px; box-sizing: border-box; }
+        .linha-inputs { display: flex; gap: 10px; }
+        .linha-inputs > div { flex: 1; }
+        .btn { width: 100%; padding: 14px; border-radius: 8px; border: none; font-weight: bold; color: white; font-size: 14px; cursor: pointer; margin-bottom: 10px; transition: 0.2s; }
+        .bg-blue { background: #1a73e8; } .bg-green { background: #2e7d32; } .bg-red { background: #d32f2f; }
+        .dash-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+        .dash-box { background: #f8f9fa; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #e0e0e0; }
+        .dash-box span { font-size: 10px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .dash-box h2 { margin: 5px 0 0 0; color: #222; font-size: 18px; }
+        .alerta-tipo { background: #e3f2fd; color: #1565c0; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 15px; border: 1px solid #90caf9; }
+        .seletor-curvas { background: #fff3e0; border: 2px solid #ff9800; color: #e65100; font-weight: bold; font-size: 16px; text-align: center; }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 5px; min-width: 600px; }
+        th, td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #eee; vertical-align: middle; }
+        th { background: #f1f3f4; color: #444; font-weight: bold; }
+        .col-caixa { background: #e3f2fd; } .col-crista { background: #fff3e0; }
+        .alerta { color: #d32f2f; font-weight: bold; } .sucesso { color: #2e7d32; font-weight: bold; }
+        .btn-corrigir { background: #ef6c00; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; width: 100%; display: block; }
+        .btn-aprovar { background: #2e7d32; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; width: 100%; display: block; }
+        canvas { width: 100% !important; max-height: 200px !important; margin-bottom: 15px; }
+        #statusSync { font-size: 11px; text-align: center; font-weight: bold; padding: 5px; margin-bottom: 10px; border-radius: 4px; }
+        .sel-mapa { border: 2px solid #1a73e8; font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">🛰️</div>
+        <div>
+            <div class="brand-name">TopoMap</div>
+            <div class="brand-sub">🚜 Conferência de Terraços</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="statusSync"></div>
+
+        <div class="card">
+            <h3>1. Identificação</h3>
+            <label>Topógrafo:</label>
+            <input type="text" id="fTopografo" placeholder="Ex: Gilberto" style="border: 2px solid #1a73e8; font-weight: bold;">
+            
+            <div class="linha-inputs">
+                <div>
+                    <label>Fazenda:</label>
+                    <select id="selFazenda" class="sel-mapa" onchange="atualizarGleba()"><option value="">Sem Mapa (Digitar)</option></select>
+                    <input type="text" id="fFazenda" placeholder="Nome/Cód da Fazenda">
+                </div>
+                <div>
+                    <label>Gleba / Talhão:</label>
+                    <select id="selGleba" class="sel-mapa" onchange="setGlebaManual()" disabled><option value="">Selecione a Fazenda</option></select>
+                    <input type="text" id="fGleba" placeholder="Gleba (Ex: G02)">
+                </div>
+            </div>
+            
+            <label style="margin-top: 10px; display: block;">Arquivo CSV da Coletora:</label>
+            <input type="file" id="arquivoCsv" accept=".csv">
+            
+            <button class="btn bg-blue" onclick="processarArquivo()">⚙️ Processar CSV</button>
+        </div>
+
+        <div class="card" id="areaSeletor" style="display: none;">
+            <h3>🔄 Conferir Curva Individualmente</h3>
+            <select id="seletorCurvas" class="seletor-curvas" onchange="mudarCurva()"></select>
+        </div>
+
+        <div id="areaResultados" style="display: none;">
+            <div id="avisoDeteccao" class="alerta-tipo"></div>
+            <div class="dash-grid">
+                <div class="dash-box"><span>Média CAIXA</span><h2 id="resMediaCaixa">-</h2></div>
+                <div class="dash-box"><span>Média CRISTA</span><h2 id="resMediaCrista">-</h2></div>
+                <div class="dash-box"><span>Situação</span><h2 id="resStatusGrafico">-</h2></div>
+            </div>
+            <div class="card">
+                <p id="tituloNivel" style="font-size: 11px; text-align: center; font-weight: bold; margin-bottom: 2px;">NÍVEL DO TERRAÇO</p>
+                <canvas id="graficoPerfil"></canvas>
+                <p id="tituloAltura" style="font-size: 11px; text-align: center; font-weight: bold; margin-top: 10px; margin-bottom: 2px;">ALTURA DO TERRAÇO</p>
+                <canvas id="graficoAltura"></canvas>
+            </div>
+            <div class="card" id="cardErros">
+                <h3>⚠️ Pontos para Arrumar (Desta Curva)</h3>
+                <div class="table-wrapper"><table id="tabelaErros"><thead><tr><th>Estaca</th><th class="col-caixa">Nível CAIXA</th><th class="col-crista">Nível CRISTA</th><th>ALTURA FINAL</th></tr></thead><tbody id="corpoTabela"></tbody></table></div>
+            </div>
+            <button class="btn bg-red" style="margin-top:15px; font-size:16px; padding:20px;" onclick="gerarRelatorioGeralPDF()">📄 GERAR RELATÓRIO COMPLETO E SALVAR</button>
+        </div>
+    </div>
+
+<script>
+    let graficoInstancia = null, graficoAlturaInstancia = null;
+    let gruposDeCurvas = []; 
+    let curvaAtualIndex = 0;
+    const URL_BANCO = "https://radar-topomap-default-rtdb.firebaseio.com/historico_qualidade.json";
+    // ===== Cloudinary — armazenamento de arquivos GRÁTIS (mesma conta dos outros apps) =====
+    const CLOUDINARY_CLOUD_NAME = "m5k3vumt";
+    const CLOUDINARY_UPLOAD_PRESET = "Topomap";
+    async function uploadPDFCloudinary(base64OuDataUri, nomeArquivo) {
+        const dataUri = String(base64OuDataUri).startsWith('data:') ? base64OuDataUri : `data:application/pdf;base64,${base64OuDataUri}`;
+        const form = new FormData();
+        form.append('file', dataUri);
+        form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        form.append('public_id', String(nomeArquivo || 'qualidade').replace(/\.pdf$/i,'').replace(/[^a-z0-9_-]/gi,'_') + '_' + Date.now());
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: 'POST', body: form });
+        if (!res.ok) throw new Error('Cloudinary HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.secure_url) throw new Error('Cloudinary sem URL');
+        return data.secure_url;
+    }
+
+    const dbPromise = new Promise((resolve, reject) => {
+        let req = indexedDB.open("TopoMapDB", 1);
+        req.onupgradeneeded = e => { e.target.result.createObjectStore("mapas"); };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject("Erro ao abrir banco local.");
+    });
+    
+    async function lerDoCelular() {
+        let db = await dbPromise;
+        return new Promise(resolve => {
+            let req = db.transaction("mapas").objectStore("mapas").get("meuMapaSHP");
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    let bancoLocal = [];
+    
+    function preencherSelectFazendas() {
+        let selF = document.getElementById('selFazenda');
+        if(bancoLocal.length > 0) {
+            let codigos = [...new Set(bancoLocal.map(d => d.cod))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            codigos.forEach(cod => {
+                let info = bancoLocal.find(d => d.cod === cod);
+                let nomeExibicao = info.nome ? `${cod} - ${info.nome}` : cod;
+                selF.innerHTML += `<option value="${nomeExibicao}">${nomeExibicao}</option>`;
+            });
+        }
+    }
+
+    function atualizarGleba() {
+        let selF = document.getElementById('selFazenda');
+        document.getElementById('fFazenda').value = selF.value; 
+        let cod = selF.value.split(' - ')[0].trim();
+        
+        let selG = document.getElementById('selGleba');
+        selG.innerHTML = '<option value="">Selecione a Gleba...</option>';
+        if(cod) {
+            let glebas = [...new Set(bancoLocal.filter(d => d.cod === cod).map(d => d.gleba))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            glebas.forEach(g => selG.innerHTML += `<option value="${g}">Gleba ${g}</option>`);
+            selG.disabled = false;
+        } else {
+            selG.disabled = true;
+        }
+    }
+
+    function setGlebaManual() {
+        document.getElementById('fGleba').value = document.getElementById('selGleba').value;
+    }
+
+    function sincronizarFila() {
+        let fila = JSON.parse(localStorage.getItem('fila_qualidade') || "[]");
+        let status = document.getElementById('statusSync');
+        if(fila.length > 0) {
+            if(navigator.onLine) {
+                status.innerText = "🔄 A sincronizar " + fila.length + " registo(s) para a nuvem...";
+                status.style.backgroundColor = "#fff9c4"; status.style.color = "#f57f17";
+                
+                fetch(URL_BANCO, { method: "POST", body: JSON.stringify(fila[0]) })
+                .then(res => {
+                    fila.shift(); 
+                    localStorage.setItem('fila_qualidade', JSON.stringify(fila));
+                    sincronizarFila(); 
+                }).catch(e => {
+                    status.innerText = "📡 Sem rede. Registros salvos no celular.";
+                    status.style.backgroundColor = "#ffebee"; status.style.color = "#c62828";
+                });
+            } else {
+                status.innerText = "📡 Sem rede. Registros salvos no celular (" + fila.length + ").";
+                status.style.backgroundColor = "#ffebee"; status.style.color = "#c62828";
+            }
+        } else {
+            status.innerText = "✅ Sistema Sincronizado";
+            status.style.backgroundColor = "#e8f5e9"; status.style.color = "#2e7d32";
+        }
+    }
+    
+    window.onload = async () => {
+        let dS = await lerDoCelular();
+        if(dS) bancoLocal = dS;
+        preencherSelectFazendas();
+        sincronizarFila();
+    };
+    
+    window.addEventListener('online', sincronizarFila);
+
+    async function salvarNaBaseDeDados(statusGeral, pdfBase64) {
+        let topografo = document.getElementById('fTopografo').value;
+        if(!topografo) topografo = "Não identificado";
+
+        let obj = {
+            fazenda: document.getElementById('fFazenda').value || "S/N",
+            gleba: document.getElementById('fGleba').value || "S/N",
+            topografo: topografo,
+            data: new Date().toLocaleDateString('pt-BR'),
+            hora: new Date().toLocaleTimeString('pt-BR'),
+            totalCurvas: gruposDeCurvas.length,
+            statusFinal: statusGeral,
+            timestamp: Date.now()
+        };
+
+        // Sobe o PDF para o Cloudinary e guarda só o link (leve). Se falhar, cai no base64.
+        if (navigator.onLine) {
+            try {
+                obj.pdfUrl = await uploadPDFCloudinary(pdfBase64, `Qualidade_${obj.fazenda}_G${obj.gleba}`);
+            } catch(e) {
+                console.warn('Cloudinary falhou, usando base64:', e);
+                obj.arquivoPDF = pdfBase64;
+            }
+        } else {
+            obj.arquivoPDF = pdfBase64;  // offline: guarda base64 na fila e sobe depois
+        }
+
+        if(navigator.onLine) {
+            fetch(URL_BANCO, { method: "POST", body: JSON.stringify(obj) })
+            .then(() => sincronizarFila())
+            .catch(() => colocarNaFila(obj));
+        } else {
+            colocarNaFila(obj);
+        }
+    }
+
+    function colocarNaFila(obj) {
+        let fila = JSON.parse(localStorage.getItem('fila_qualidade') || "[]");
+        fila.push(obj);
+        localStorage.setItem('fila_qualidade', JSON.stringify(fila));
+        sincronizarFila();
+        alert("Modo Offline! O relatório foi gerado e será enviado automaticamente ao banco de dados assim que conectar no Wi-Fi/4G.");
+    }
+
+    function processarArquivo() {
+        let fileInput = document.getElementById('arquivoCsv');
+        if(!fileInput.files[0]) return alert("Selecione o arquivo.");
+        Papa.parse(fileInput.files[0], {
+            complete: function(results) {
+                let pontos = [];
+                results.data.forEach(l => {
+                    if(l.length >= 5 && !isNaN(parseFloat(l[3]))) {
+                        pontos.push({ pt: l[0], n: parseFloat(l[1]), e: parseFloat(l[2]), z: parseFloat(l[3]), desc: String(l[4]).toUpperCase().trim(), aceitoManual: false, justificativa: "" });
+                    }
+                });
+                if(pontos.length === 0) return alert("Não foi possível ler as coordenadas.");
+                separarCurvasPorCota(pontos);
+            }
+        });
+    }
+
+    function separarCurvasPorCota(pontos) {
+        let caixas = pontos.filter(p => p.desc.includes('CAIXA') || p.desc.includes('CX'));
+        let cristas = pontos.filter(p => p.desc.includes('CRISTA') || p.desc.includes('CR'));
+        if(caixas.length === 0 || cristas.length === 0) return alert("Faltam pontos com descrição CAIXA ou CRISTA.");
+        
+        let todosPares = [];
+        caixas.forEach(cx => {
+            let cristaMaisProxima = null; let menorDist = Infinity;
+            cristas.forEach(cr => {
+                let dist = Math.sqrt(Math.pow(cx.e - cr.e, 2) + Math.pow(cx.n - cr.n, 2));
+                if(dist < menorDist && dist <= 8.0) { menorDist = dist; cristaMaisProxima = cr; }
+            });
+            if(cristaMaisProxima) todosPares.push({ caixa: cx, crista: cristaMaisProxima });
+        });
+
+        gruposDeCurvas = [];
+        todosPares.forEach(par => {
+            let achou = false;
+            for(let g of gruposDeCurvas) {
+                let media = g.pares.reduce((s, p) => s + p.caixa.z, 0) / g.pares.length;
+                if(Math.abs(par.caixa.z - media) < 2.5) { g.pares.push(par); achou = true; break; }
+            }
+            if(!achou) gruposDeCurvas.push({ id: gruposDeCurvas.length+1, pares: [par], logCorrecoes: 0, logAceitos: 0, tirouFotoAntes: false, imgP: null, imgA: null });
+        });
+
+        let select = document.getElementById('seletorCurvas');
+        select.innerHTML = '';
+        gruposDeCurvas.forEach((g, i) => {
+            let opt = document.createElement('option'); opt.value = i;
+            opt.text = `Curva ${g.id} (Cota: ${(g.pares.reduce((s,p)=>s+p.caixa.z,0)/g.pares.length).toFixed(1)}m)`;
+            select.appendChild(opt);
+        });
+        document.getElementById('areaSeletor').style.display = 'block';
+        curvaAtualIndex = 0; renderizarCurvaAtual();
+    }
+
+    function mudarCurva() { curvaAtualIndex = document.getElementById('seletorCurvas').value; renderizarCurvaAtual(); }
+
+    function renderizarCurvaAtual() {
+        let curva = gruposDeCurvas[curvaAtualIndex];
+        let p = curva.pares;
+        let mCX = p.reduce((s,x)=>s+x.caixa.z,0)/p.length;
+        let mCR = p.reduce((s,x)=>s+x.crista.z,0)/p.length;
+        let mediaAlt = mCR - mCX;
+        let tMin = mediaAlt >= 0.8 ? 1.0 : 0.4, tMax = mediaAlt >= 0.8 ? 1.2 : 0.6;
+        let tNome = mediaAlt >= 0.8 ? "Terraço Embutido" : "Terraço Base Larga";
+
+        document.getElementById('resMediaCaixa').innerText = mCX.toFixed(2)+"m";
+        document.getElementById('resMediaCrista').innerText = mCR.toFixed(2)+"m";
+        document.getElementById('avisoDeteccao').innerHTML = `🔍 <b>${tNome}</b> (Tolerância: ${tMin.toFixed(2)}m a ${tMax.toFixed(2)}m)`;
+
+        let tbody = document.getElementById('corpoTabela'); tbody.innerHTML = '';
+        let labels = [], dCX = [], dCR = [], dAL = [], erros = 0;
+
+        p.forEach(par => {
+            labels.push(par.caixa.pt); dCX.push(par.caixa.z); dCR.push(par.crista.z);
+            let alt = par.crista.z - par.caixa.z; dAL.push(alt);
+            let errCX = par.caixa.z - mCX, errCR = par.crista.z - mCR;
+            let msgCX = Math.abs(errCX) > 0.1 ? (errCX>0?`⬇️ Cortar ${Math.abs(errCX*100).toFixed(0)}cm`:`⬆️ Aterrar ${Math.abs(errCX*100).toFixed(0)}cm`) : "✅ OK";
+            let msgCR = Math.abs(errCR) > 0.1 ? (errCR>0?`⬇️ Cortar ${Math.abs(errCR*100).toFixed(0)}cm`:`⬆️ Aterrar ${Math.abs(errCR*100).toFixed(0)}cm`) : "✅ OK";
+            let msgAL = alt < tMin ? `Falta ${(Math.abs(tMin-alt)*100).toFixed(0)}cm` : (alt > tMax ? `Sobra ${(Math.abs(alt-tMax)*100).toFixed(0)}cm` : "✅ OK");
+
+            if(par.caixa.aceitoManual) { msgCX="✅ Aceito"; msgCR="✅ Aceito"; msgAL="✅ Aceito"; }
+            if(!msgCX.includes("✅") || !msgCR.includes("✅") || !msgAL.includes("✅")) {
+                erros++;
+                let tr = document.createElement('tr');
+                tr.innerHTML = `<td><b>${par.caixa.pt}</b></td><td class="col-caixa">${msgCX}<br><button class="btn-corrigir" onclick="ajustar('${par.caixa.pt}',${mCX})">✏️ Ajustar</button><button class="btn-aprovar" onclick="aceitar('${par.caixa.pt}')">✔️ Aceitar</button></td><td class="col-crista">${msgCR}</td><td>${msgAL}</td>`;
+                tbody.appendChild(tr);
+            }
+        });
+
+        document.getElementById('resStatusGrafico').innerText = erros === 0 ? "✅ NO PADRÃO" : "⚠️ COM ERRO ("+erros+")";
+        document.getElementById('resStatusGrafico').style.color = erros === 0 ? "#2e7d32" : "#d32f2f";
+        desenhar(labels, dCX, dCR, mCX, mCR, dAL, tMin, tMax, tNome);
+        document.getElementById('areaResultados').style.display = 'block';
+
+        if(!curva.tirouFotoAntes && erros > 0) {
+            // VOLTANDO PARA PNG AQUI (Mantém o fundo transparente)
+            setTimeout(() => { curva.imgP = document.getElementById('graficoPerfil').toDataURL('image/png'); curva.imgA = document.getElementById('graficoAltura').toDataURL('image/png'); curva.tirouFotoAntes = true; }, 400);
+        }
+    }
+
+    function ajustar(pt, alvo) {
+        let v = prompt(`Estaca ${pt}. Cota esperada: ${alvo.toFixed(3)}. Digite a nova cota Z:`);
+        if(v) { let curva = gruposDeCurvas[curvaAtualIndex]; let p = curva.pares.find(x=>x.caixa.pt===pt); if(p){ p.caixa.z = parseFloat(v.replace(',','.')); curva.logCorrecoes++; renderizarCurvaAtual(); } }
+    }
+
+    function aceitar(pt) {
+        let m = prompt(`Motivo para justificar a estaca ${pt}:`);
+        if(m) { let curva = gruposDeCurvas[curvaAtualIndex]; let p = curva.pares.find(x=>x.caixa.pt===pt); if(p){ p.caixa.aceitoManual = true; p.caixa.justificativa = m; curva.logAceitos++; renderizarCurvaAtual(); } }
+    }
+
+    function desenhar(labels, dCX, dCR, mCX, mCR, dAL, tMin, tMax, tNome) {
+        if(graficoInstancia) graficoInstancia.destroy();
+        if(graficoAlturaInstancia) graficoAlturaInstancia.destroy();
+        let ctxP = document.getElementById('graficoPerfil').getContext('2d');
+        graficoInstancia = new Chart(ctxP, { type: 'line', data: { labels: labels, datasets: [
+            { label: 'Média Caixa', data: Array(labels.length).fill(mCX), borderColor: '#1a73e8', borderDash: [5,5], fill: false, pointRadius: 0 },
+            { label: 'Cota Caixa', data: dCX, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.1)', fill: true },
+            { label: 'Média Crista', data: Array(labels.length).fill(mCR), borderColor: '#ef6c00', borderDash: [5,5], fill: false, pointRadius: 0 },
+            { label: 'Cota Crista', data: dCR, borderColor: '#ef6c00', fill: false }
+        ]}, options: { animation: false, responsive: true, maintainAspectRatio: false } });
+
+        let ctxA = document.getElementById('graficoAltura').getContext('2d');
+        graficoAlturaInstancia = new Chart(ctxA, { type: 'line', data: { labels: labels, datasets: [
+            { label: 'Máx', data: Array(labels.length).fill(tMax), borderColor: 'red', borderDash: [3,3], fill: false, pointRadius:0 },
+            { label: 'Altura', data: dAL, borderColor: 'green', backgroundColor: 'rgba(0,255,0,0.1)', fill: true },
+            { label: 'Mín', data: Array(labels.length).fill(tMin), borderColor: 'red', borderDash: [3,3], fill: false, pointRadius:0 }
+        ]}, options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { y: { min: tMin-0.2, max: tMax+0.2 } } } });
+    }
+
+    async function gerarRelatorioGeralPDF() {
+        let topografo = document.getElementById('fTopografo').value;
+        if(!topografo) {
+            alert("⚠️ Por favor, digite o nome do Topógrafo antes de gerar o relatório.");
+            return;
+        }
+
+        let faz = document.getElementById('fFazenda').value || "Não informada";
+        let gleb = document.getElementById('fGleba').value || "Não informada";
+        
+        let conteudo = [
+            { text: 'RELATÓRIO GERAL DE CONFERÊNCIA DE TERRAÇOS', style: 'header', alignment: 'center' },
+            { text: `Fazenda: ${faz} | Gleba/Talhão: ${gleb}`, alignment: 'center', bold: true, margin: [0, 5, 0, 2] },
+            { text: `Topógrafo: ${topografo}`, alignment: 'center', color: '#1a73e8', bold: true, margin: [0, 0, 0, 10] },
+            { text: `Total de curvas processadas: ${gruposDeCurvas.length}`, alignment: 'center', margin: [0, 0, 0, 20] }
+        ];
+
+        let temErroGeral = false;
+
+        for (let i = 0; i < gruposDeCurvas.length; i++) {
+            curvaAtualIndex = i;
+            renderizarCurvaAtual();
+            await new Promise(r => setTimeout(r, 100));
+
+            let curva = gruposDeCurvas[i];
+            let tipoLimpo = document.getElementById('avisoDeteccao').innerText.split(' - ')[0].replace('🔍 ', '').replace(' Detectado', '').trim();
+            
+            // VOLTANDO PARA PNG AQUI TAMBÉM (Mantém o fundo transparente/branco)
+            let imgFinalP = document.getElementById('graficoPerfil').toDataURL('image/png');
+            let imgFinalA = document.getElementById('graficoAltura').toDataURL('image/png');
+            let errosAgora = document.getElementById('resStatusGrafico').innerText.includes("NO PADRÃO") ? 0 : 1;
+            
+            if(errosAgora > 0) temErroGeral = true;
+
+            conteudo.push({ text: `__________________________________________________________`, color: '#ccc', margin: [0, 10, 0, 10] });
+            conteudo.push({ text: `SEÇÃO: CURVA ${curva.id}`, style: 'subheader', color: '#1a73e8' });
+            conteudo.push({ text: `Tipo: ${tipoLimpo}`, margin: [0, 2, 0, 5] });
+            
+            let resumo = `• Pontos corrigidos: ${curva.logCorrecoes} | • Liberados no estado: ${curva.logAceitos}`;
+            conteudo.push({ text: resumo, fontSize: 10, margin: [0, 0, 0, 5] });
+
+            let justs = curva.pares.filter(p => p.caixa.aceitoManual);
+            if(justs.length > 0) {
+                conteudo.push({ text: 'Justificativas:', fontSize: 9, bold: true });
+                justs.forEach(j => { conteudo.push({ text: `- Estaca ${j.caixa.pt}: ${j.caixa.justificativa}`, fontSize: 9, margin: [10, 0, 0, 2] }); });
+            }
+
+            if(curva.logCorrecoes > 0 && curva.tirouFotoAntes) {
+                conteudo.push({ text: 'SITUAÇÃO INICIAL (ANTES)', fontSize: 9, bold: true, alignment: 'center', margin: [0, 10, 0, 5] });
+                conteudo.push({ columns: [ { image: curva.imgP, width: 240 }, { image: curva.imgA, width: 240 } ] });
+                conteudo.push({ text: 'SITUAÇÃO FINAL (DEPOIS)', fontSize: 9, bold: true, alignment: 'center', margin: [0, 10, 0, 5] });
+            } else {
+                conteudo.push({ text: 'GRÁFICOS DE CONFERÊNCIA', fontSize: 9, bold: true, alignment: 'center', margin: [0, 10, 0, 5] });
+            }
+
+            conteudo.push({ columns: [ { image: imgFinalP, width: 240 }, { image: imgFinalA, width: 240 } ] });
+            
+            let statusCor = errosAgora === 0 ? '#2e7d32' : '#d32f2f';
+            let statusTxt = errosAgora === 0 ? 'TERRAÇO DENTRO DOS PADRÕES' : 'TERRAÇO COM PENDÊNCIAS';
+            conteudo.push({ text: statusTxt, fontSize: 12, bold: true, color: statusCor, alignment: 'center', margin: [0, 10, 0, 10] });
+        }
+
+        conteudo.push({ text: `Relatório gerado em: ${new Date().toLocaleString('pt-BR')}`, fontSize: 8, alignment: 'right', margin: [0, 20, 0, 0] });
+
+        const docGerador = pdfMake.createPdf({ content: conteudo, styles: { header: { fontSize: 16, bold: true }, subheader: { fontSize: 13, bold: true, margin: [0, 10, 0, 5] } } });
+        docGerador.download(`Qualidade_${faz}_G${gleb}.pdf`);
+
+        docGerador.getBase64((base64Data) => {
+            let statusGeralBanco = temErroGeral ? "REPROVADO" : "APROVADO";
+            salvarNaBaseDeDados(statusGeralBanco, base64Data);
+        });
+    }
+</script>
+</body>
+</html>

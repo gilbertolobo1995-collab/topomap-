@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gerador KML - TopoMap</title>
+    
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root {
+            --primary-green: #1b5e20;
+            --primary-light: #4caf50;
+            --bg-gray: #f4f6f8;
+            --surface: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --accent-blue: #1a73e8;
+            --accent-blue-light: #e3f2fd;
+            --border-color: #dadce0;
+            --radius: 12px;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-gray); 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 100vh; 
+        }
+
+        .header { 
+            background: linear-gradient(135deg, #0a3d0a, #1b5e20);
+            color: white; 
+            padding: 15px 20px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        .header .logo { width: 35px; height: 35px; border-radius: 8px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .header .title { font-size: 17px; font-weight: 800; letter-spacing: 0.5px; }
+
+        .container { padding: 20px 16px; max-width: 500px; margin: auto; width: 100%; box-sizing: border-box; }
+
+        .card { 
+            background: var(--surface); 
+            padding: 20px; 
+            border-radius: var(--radius); 
+            box-shadow: var(--shadow); 
+            margin-bottom: 20px; 
+            border: 1px solid var(--border-color);
+        }
+        .card h3 { margin: 0 0 15px 0; color: var(--primary-green); font-size: 16px; display: flex; align-items: center; gap: 8px; }
+
+        label { 
+            display: block; 
+            font-size: 11px; 
+            font-weight: bold; 
+            color: var(--primary-green); 
+            text-transform: uppercase; 
+            margin-bottom: 5px; 
+            margin-top: 15px;
+        }
+        input, select { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 8px; 
+            font-size: 15px; 
+            box-sizing: border-box; 
+            background: #f9f9f9; 
+            transition: 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary-green); outline: none; background: #fff; }
+        select:disabled, input:disabled { background-color: #eceff1; color: #78909c; cursor: not-allowed; }
+        
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+
+        .grid-talhoes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+        .btn-talhao { 
+            background: #f1f8e9; border: 1px solid #c5e1a5; padding: 10px 5px; border-radius: 8px; 
+            text-align: center; font-weight: bold; color: #33691e; cursor: pointer; 
+            user-select: none; transition: 0.2s; font-size: 13px; 
+        }
+        .btn-talhao.ativo { background: var(--primary-green); color: white; border-color: #1b5e20; transform: scale(0.95); }
+
+        .check-container { 
+            display: flex; align-items: center; gap: 10px; margin-top: 15px; 
+            background: var(--accent-blue-light); padding: 10px; border-radius: 8px; 
+            border: 1px solid #bbdefb; 
+        }
+        .check-container input { width: auto; margin: 0; transform: scale(1.3); }
+        .check-container label { margin: 0; color: var(--accent-blue); cursor: pointer; font-weight: bold; text-transform: none; }
+
+        .check-pontos { background: #f1f8e9; border-color: #c5e1a5; }
+        .check-pontos label { color: var(--primary-green); }
+
+        .btn-gerar { 
+            background: linear-gradient(135deg, #25D366, #1b9e4b); 
+            color: white; border: none; padding: 18px; width: 100%; 
+            font-size: 16px; border-radius: var(--radius); 
+            margin-top: 25px; font-weight: bold; cursor: pointer; 
+            box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+            transition: 0.3s;
+        }
+        .btn-gerar:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+        .btn-gerar:active { transform: scale(0.98); }
+
+        #mapaSelecaoContainer { margin-top: 15px; display: none; }
+        #mapaSelecao { height: 300px; width: 100%; border-radius: var(--radius); border: 2px solid var(--border-color); }
+        .label-talhao { 
+            background: rgba(255, 255, 255, 0.9); border: 1px solid #666; box-shadow: 0 1px 3px rgba(0,0,0,0.3); 
+            font-weight: bold; color: #111; font-size: 12px; padding: 2px 6px; border-radius: 4px; 
+        }
+
+        .preview-box { margin-top: 20px; padding: 15px; background: #e5ddd5; border-radius: var(--radius); display: none; border: 1px solid #ccc; }
+        .preview-text { background: #dcf8c6; padding: 12px; border-radius: 8px; font-size: 14px; color: #303030; text-align: center; font-weight: bold; margin-bottom: 10px;}
+        #mapaPreview { height: 250px; width: 100%; border-radius: var(--radius); display: none; border: 2px solid #fff; }
+
+        .dark-theme { background-color: #121212; color: #eee; }
+        .dark-theme .card { background: #1e1e1e; border-color: #333; color: #eee; }
+        .dark-theme .card h3 { color: #81c784; }
+        .dark-theme label { color: #81c784; }
+        .dark-theme input, .dark-theme select { background: #2a2a2a; border-color: #444; color: #fff; }
+        .dark-theme .btn-talhao { background: #2a3a2a; border-color: #3d5a3d; color: #81c784; }
+        .dark-theme .btn-talhao.ativo { background: #4caf50; color: white; }
+        .dark-theme .check-container { background: #1a237e; border-color: #303f9f; }
+        .dark-theme .check-container label { color: #9fa8da; }
+        .dark-theme .check-pontos { background: #1b331b; border-color: #2e7d32; }
+        .dark-theme .check-pontos label { color: #81c784; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">🎯</div>
+        <div class="title">Gerador de KML Individual</div>
+        <div style="width: 35px;"></div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h3>🗺️ Configuração do Mapa</h3>
+            <label>1. Carregue o Mapa (.ZIP):</label>
+            <input type="file" id="zipFile" accept=".zip" onchange="carregarMapa()">
+
+            <div class="row">
+                <div>
+                    <label>Fazenda (Cod):</label>
+                    <select id="selFazenda" disabled onchange="atualizarFazenda()">
+                        <option value="">Aguardando mapa...</option>
+                    </select>
+                </div>
+                <div style="flex: 2;">
+                    <label>Nome da Área:</label>
+                    <input type="text" id="nomeFazenda" disabled placeholder="Automático">
+                </div>
+            </div>
+
+            <label>Gleba:</label>
+            <select id="selGleba" disabled onchange="atualizarGleba()">
+                <option value="">Selecione a Fazenda primeiro</option>
+            </select>
+        </div>
+
+        <div class="card" id="selectionCard" style="display:none;">
+            <h3>📍 Seleção de Talhões</h3>
+            <div id="mapaSelecaoContainer">
+                <label>Toque no mapa para selecionar:</label>
+                <div id="mapaSelecao"></div>
+            </div>
+
+            <div class="check-container">
+                <input type="checkbox" id="checkTodos" disabled onchange="toggleTodosTalhoes()">
+                <label for="checkTodos">Selecionar TODOS os talhões</label>
+            </div>
+
+            <label>Ou selecione via botões:</label>
+            <div class="grid-talhoes" id="boxTalhoes">
+                <div style="grid-column: span 5; text-align: center; color: #888; font-size: 14px;">Aguardando seleção de Gleba...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>⚙️ Ajustes do Arquivo</h3>
+            <div class="row">
+                <div>
+                    <label>Buffer (Margem):</label>
+                    <select id="bufferDist">
+                        <option value="0">0m (Exato)</option>
+                        <option value="10">10 metros</option>
+                        <option value="20">20 metros</option>
+                        <option value="30">30 metros</option>
+                        <option value="40">40 metros</option>
+                        <option value="50" selected>50 metros</option>
+                        <option value="60">60 metros</option>
+                        <option value="70">70 metros</option>
+                        <option value="80">80 metros</option>
+                        <option value="90">90 metros</option>
+                        <option value="100">100 metros</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Simplificação:</label>
+                    <select id="nivelSimplificacao">
+                        <option value="0">Nenhuma</option>
+                        <option value="0.00005">Leve</option>
+                        <option value="0.00015" selected>Padrão</option>
+                        <option value="0.0005">Forte</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="check-container check-pontos">
+                <input type="checkbox" id="checkPontos">
+                <label for="checkPontos">📍 Incluir Pontos Check (3 a cada 100ha)</label>
+            </div>
+
+            <button class="btn-gerar" id="btnGerar" onclick="gerarKML()" disabled>Processar e Baixar KML</button>
+        </div>
+
+        <div class="preview-box" id="previewBox">
+            <div class="preview-text" id="previewText"></div>
+            <div id="mapaPreview"></div>
+        </div>
+    </div>
+
+<script>
+    let globalGeojson = null;
+    let dadosPropriedades = []; 
+    let talhoesSelecionados = new Set();
+    
+    let mapSelecao = null;
+    let geojsonLayer = null;
+    let featureLayers = {}; 
+
+    let globalMap = null;
+    let globalLayer = null;
+
+    async function carregarMapa() {
+        const zipFile = document.getElementById('zipFile').files[0];
+        if (!zipFile) return;
+        document.getElementById('selFazenda').innerHTML = '<option>Processando...</option>';
+        try {
+            const zipBuffer = await zipFile.arrayBuffer();
+            let geojson = await shp(zipBuffer);
+            if (Array.isArray(geojson)) geojson = geojson[0];
+            geojson.features.forEach(f => {
+                let newProps = {};
+                for (let k in f.properties) newProps[k.toUpperCase()] = f.properties[k];
+                f.properties = newProps;
+            });
+            globalGeojson = geojson;
+            dadosPropriedades = geojson.features.map(f => ({
+                cod: String(f.properties["FAZENDA"] || "").trim(),
+                nome: String(f.properties["PROPRIEDAD"] || "AREA").trim(),
+                gleba: String(f.properties["GLEBA"] || "").trim(),
+                talhao: String(f.properties["TALHAO"] || "").trim()
+            })).filter(d => d.cod !== "");
+            let codigosUnicos = [...new Set(dadosPropriedades.map(d => d.cod))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            let selFazenda = document.getElementById('selFazenda');
+            selFazenda.innerHTML = '<option value="">Selecione...</option>';
+            codigosUnicos.forEach(cod => { selFazenda.innerHTML += `<option value="${cod}">${cod}</option>`; });
+            selFazenda.disabled = false;
+            alert("✅ Mapa carregado e analisado!");
+        } catch (e) { 
+            alert("Erro ao ler ZIP!"); 
+            document.getElementById('selFazenda').innerHTML = '<option>Erro</option>';
+        }
+    }
+
+    function atualizarFazenda() {
+        let codSelecionado = document.getElementById('selFazenda').value;
+        if(!codSelecionado) return;
+        let fazendaInfo = dadosPropriedades.find(d => d.cod === codSelecionado);
+        document.getElementById('nomeFazenda').value = fazendaInfo ? fazendaInfo.nome : "";
+        let glebasDaFazenda = dadosPropriedades.filter(d => d.cod === codSelecionado);
+        let glebasUnicas = [...new Set(glebasDaFazenda.map(d => d.gleba))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        let selGleba = document.getElementById('selGleba');
+        selGleba.innerHTML = '<option value="">Selecione...</option>';
+        glebasUnicas.forEach(g => { selGleba.innerHTML += `<option value="${g}">Gleba ${g}</option>`; });
+        selGleba.disabled = false;
+        document.getElementById('checkTodos').disabled = true;
+        document.getElementById('checkTodos').checked = false;
+        document.getElementById('boxTalhoes').innerHTML = '<div style="grid-column: span 5; text-align: center; color: #888; font-size: 14px;">Selecione a Gleba...</div>';
+        document.getElementById('mapaSelecaoContainer').style.display = 'none';
+        document.getElementById('selectionCard').style.display = 'none';
+        document.getElementById('btnGerar').disabled = true;
+    }
+
+    function atualizarGleba() {
+        let codSelecionado = document.getElementById('selFazenda').value;
+        let glebaSelecionada = document.getElementById('selGleba').value;
+        if(!glebaSelecionada) return;
+        let talhoesDaGleba = dadosPropriedades.filter(d => d.cod === codSelecionado && d.gleba === glebaSelecionada);
+        let talhoesUnicos = [...new Set(talhoesDaGleba.map(d => d.talhao))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        let box = document.getElementById('boxTalhoes');
+        box.innerHTML = '';
+        talhoesSelecionados.clear();
+        talhoesUnicos.forEach(t => {
+            let div = document.createElement('div');
+            div.className = 'btn-talhao';
+            div.id = 'btn-t-' + t; 
+            div.innerText = t;
+            div.onclick = () => toggleTalhao(t);
+            box.appendChild(div);
+        });
+        document.getElementById('checkTodos').disabled = false;
+        document.getElementById('checkTodos').checked = false;
+        verificarBotaoGerar();
+        let featuresGleba = globalGeojson.features.filter(f => {
+            let p = f.properties;
+            return String(p["FAZENDA"]||"").trim() === codSelecionado && String(p["GLEBA"]||"").trim() === glebaSelecionada;
+        });
+        document.getElementById('mapaSelecaoContainer').style.display = 'block';
+        document.getElementById('selectionCard').style.display = 'block';
+        if (!mapSelecao) {
+            mapSelecao = L.map('mapaSelecao');
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(mapSelecao);
+        }
+        setTimeout(() => { mapSelecao.invalidateSize(); }, 300); 
+        if (geojsonLayer) mapSelecao.removeLayer(geojsonLayer);
+        featureLayers = {}; 
+        let estiloNormal = { color: '#25D366', weight: 2, fillColor: '#f1f8e9', fillOpacity: 0.4 };
+        geojsonLayer = L.geoJSON(featuresGleba, {
+            style: estiloNormal,
+            onEachFeature: function (feature, layer) {
+                let talhao = String(feature.properties["TALHAO"]).trim();
+                featureLayers[talhao] = layer;
+                layer.bindTooltip(talhao, { permanent: true, direction: 'center', className: 'label-talhao' });
+                layer.on('click', function () { toggleTalhao(talhao); });
+            }
+        }).addTo(mapSelecao);
+        mapSelecao.fitBounds(geojsonLayer.getBounds());
+    }
+
+    function toggleTalhao(t) {
+        if(document.getElementById('checkTodos').checked) return;
+        let divBtn = document.getElementById('btn-t-' + t);
+        let layerMap = featureLayers[t];
+        if(talhoesSelecionados.has(t)) {
+            talhoesSelecionados.delete(t);
+            if(divBtn) divBtn.classList.remove('ativo');
+            if(layerMap) layerMap.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 });
+        } else {
+            talhoesSelecionados.add(t);
+            if(divBtn) divBtn.classList.add('ativo');
+            if(layerMap) layerMap.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 });
+        }
+        verificarBotaoGerar();
+    }
+
+    function toggleTodosTalhoes() {
+        let isTodos = document.getElementById('checkTodos').checked;
+        let botoes = document.querySelectorAll('.btn-talhao');
+        talhoesSelecionados.clear();
+        botoes.forEach(b => {
+            let t = b.innerText;
+            let layerMap = featureLayers[t];
+            if(isTodos) {
+                b.classList.add('ativo');
+                b.style.opacity = '0.6';
+                b.style.cursor = 'not-allowed';
+                if(layerMap) layerMap.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 });
+            } else {
+                b.classList.remove('ativo');
+                b.style.opacity = '1';
+                b.style.cursor = 'pointer';
+                if(layerMap) layerMap.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 });
+            }
+        });
+        verificarBotaoGerar();
+    }
+
+    function verificarBotaoGerar() {
+        let isTodos = document.getElementById('checkTodos').checked;
+        document.getElementById('btnGerar').disabled = (!isTodos && talhoesSelecionados.size === 0);
+    }
+
+    function gerarStringPontos(parte, areaHa, isGerarPontos) {
+        if (!isGerarPontos) return "";
+        let fracao = (areaHa / 100) * 3;
+        let ptsDesejados = Math.max(1, Math.round(fracao));
+        let bbox = turf.bbox(parte);
+        let candidatos = [];
+        for(let t = 0; t < 2000 && candidatos.length < (ptsDesejados * 10); t++) {
+            let pt = turf.point([bbox[0] + Math.random()*(bbox[2]-bbox[0]), bbox[1] + Math.random()*(bbox[3]-bbox[1])]);
+            if (turf.booleanPointInPolygon(pt, parte)) candidatos.push(pt.geometry.coordinates);
+        }
+        if (candidatos.length === 0) candidatos.push(turf.centerOfMass(parte).geometry.coordinates);
+        let sel = [candidatos.reduce((min, p) => p[0] < min[0] ? p : min, candidatos[0])];
+        while (sel.length < ptsDesejados && sel.length < candidatos.length) {
+            let melhor = null, maxDist = -1;
+            candidatos.forEach(c => {
+                if (sel.includes(c)) return;
+                let minDist = Math.min(...sel.map(s => turf.distance(turf.point(c), turf.point(s))));
+                if (minDist > maxDist) { maxDist = minDist; melhor = c; }
+            });
+            if (melhor) sel.push(melhor);
+        }
+        sel.sort((a,b) => a[0] - b[0]);
+        return sel.map((p, i) => `<Placemark><name>P${i+1}</name><Point><coordinates>${p[0].toFixed(7)},${p[1].toFixed(7)},0</coordinates></Point></Placemark>`).join("");
+    }
+
+    async function gerarKML() {
+        let fazenda = document.getElementById('selFazenda').value;
+        let gleba = document.getElementById('selGleba').value;
+        let nomeProp = document.getElementById('nomeFazenda').value;
+        let isTodos = document.getElementById('checkTodos').checked;
+        let bufferVal = parseFloat(document.getElementById('bufferDist').value);
+        let simplificacaoVal = parseFloat(document.getElementById('nivelSimplificacao').value);
+        let gerarPontos = document.getElementById('checkPontos').checked; 
+        let arrayTalhoes = Array.from(talhoesSelecionados);
+        let selecionados = globalGeojson.features.filter(f => {
+            let p = f.properties;
+            let condBase = (String(p["FAZENDA"]||"").trim() === fazenda && String(p["GLEBA"]||"").trim() === gleba);
+            return isTodos ? condBase : (condBase && arrayTalhoes.includes(String(p["TALHAO"]||"").trim()));
+        });
+        if (selecionados.length === 0) { alert("Nenhuma área encontrada!"); return; }
+        let uniao = selecionados[0];
+        for (let i = 1; i < selecionados.length; i++) uniao = turf.union(uniao, selecionados[i]);
+        let areaFinal = bufferVal > 0 ? turf.buffer(uniao, bufferVal, {units:'meters'}) : uniao;
+        let simplificado = simplificacaoVal > 0 ? turf.simplify(areaFinal, {tolerance: simplificacaoVal, highQuality: false}) : areaFinal;
+        document.getElementById('previewBox').style.display = 'block';
+        document.getElementById('mapaPreview').style.display = 'block';
+        if (!globalMap) {
+            globalMap = L.map('mapaPreview');
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(globalMap);
+        }
+        if (globalLayer) globalMap.removeLayer(globalLayer);
+        globalLayer = L.geoJSON(simplificado, {style: {color: 'red', fillOpacity: 0.2}}).addTo(globalMap);
+        globalMap.fitBounds(globalLayer.getBounds());
+        let labelTalhoes = isTodos ? "GLEBA_TODA" : arrayTalhoes.join("_");
+        let nomeBase = `${fazenda}_${nomeProp}_G${gleba}_${labelTalhoes}`;
+        let partes = simplificado.geometry.type === 'MultiPolygon' ? simplificado.geometry.coordinates.map(c => turf.polygon(c)) : [simplificado];
+        if (partes.length === 1) {
+            let coords = partes[0].geometry.coordinates[0];
+            let strCoords = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
+            let areaHa = turf.area(partes[0])/10000;
+            let strPts = gerarStringPontos(partes[0], areaHa, gerarPontos); 
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+            <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${nomeBase}</name>
+            <Style id="rv"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
+            <Placemark><name>${areaHa.toFixed(2)} HA</name><styleUrl>#rv</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${strCoords}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+            ${strPts}</Document></kml>`;
+            let blob = new Blob([kml], {type: "application/vnd.google-earth.kml+xml"});
+            saveAs(blob, nomeBase + ".kml");
+            document.getElementById('previewText').innerText = `✅ Gerado: 1 KML (${areaHa.toFixed(2)} HA)`;
+        } else {
+            let jszip = new JSZip();
+            let totalHa = 0;
+            partes.forEach((parte, idx) => {
+                let coords = parte.geometry.coordinates[0];
+                let strCoords = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
+                let areaHa = turf.area(parte)/10000;
+                totalHa += areaHa;
+                let strPts = gerarStringPontos(parte, areaHa, gerarPontos); 
+                let nomeArq = `${nomeBase}_PT${String(idx + 1).padStart(2, '0')}`;
+                let kmlParte = `<?xml version="1.0" encoding="UTF-8"?>
+                <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${nomeArq}</name>
+                <Style id="rv"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
+                <Placemark><name>${areaHa.toFixed(2)} HA</name><styleUrl>#rv</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${strCoords}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+                ${strPts}</Document></kml>`;
+                jszip.file(nomeArq + ".kml", kmlParte);
+            });
+            jszip.generateAsync({type:"blob"}).then(function(content) {
+                saveAs(content, nomeBase + ".zip");
+            });
+            document.getElementById('previewText').innerText = `✅ Gerado: ZIP com ${partes.length} KMLs (${totalHa.toFixed(2)} HA total)`;
+        }
+    }
+</script>
+</body>
+</html>

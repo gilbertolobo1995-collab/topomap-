@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor - Histórico Ambiental</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: auto; }
+        /* ===== Identidade TopoMap (cabeçalho padrão) ===== */
+        .topbar { background: linear-gradient(135deg, #0a3d0a, #1b5e20); color: #fff; padding: 16px 20px; border-radius: 14px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.15); position: relative; overflow: hidden; }
+        .topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, #fbc02d, #4caf50, #fbc02d); }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand .logo { width: 42px; height: 42px; border-radius: 11px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+        .brand-name { font-size: 19px; font-weight: 800; letter-spacing: .5px; line-height: 1.1; }
+        .brand-sub { font-size: 12.5px; font-weight: 500; opacity: .9; margin-top: 2px; }
+        .brand-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; background: rgba(255,255,255,0.18); padding: 6px 12px; border-radius: 20px; white-space: nowrap; }
+        @media (max-width: 520px) { .brand-tag { display: none; } }
+
+        .spinner { width: 34px; height: 34px; border: 3px solid #e0e0e0; border-top-color: #1b5e20; border-radius: 50%; animation: girar .8s linear infinite; margin: 10px auto; }
+        @keyframes girar { to { transform: rotate(360deg); } }
+        .estado-vazio { text-align: center; color: #9aa0a6; padding: 40px 20px; }
+        .estado-vazio .icone { font-size: 46px; opacity: .5; display: block; margin-bottom: 8px; }
+
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-box { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); text-align: center; }
+        .stat-box .num { font-size: 24px; font-weight: bold; color: #1b5e20; }
+        .stat-box .lbl { font-size: 12px; color: #888; text-transform: uppercase; margin-top: 4px; letter-spacing: .5px; }
+
+        .filtros { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); margin-bottom: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+        .filtros input, .filtros select { padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; }
+        .filtros label { font-size: 11px; color: #888; text-transform: uppercase; display: block; margin-bottom: 4px; letter-spacing: .5px; }
+
+        .barra-acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .barra-acoes button { flex: 1; min-width: 140px; padding: 13px; border-radius: 8px; border: none; color: white; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-reload { background: #37474f; }
+        .btn-csv { background: #2e7d32; }
+        .btn-xlsx { background: #1565c0; }
+        .btn-lixeira { background: #6d4c41; }
+        .btn-lixeira.ativo { background: #c62828; }
+        .barra-acoes button:disabled { opacity: .6; cursor: not-allowed; }
+
+        .contador { font-size: 13px; color: #555; margin-bottom: 12px; font-weight: bold; }
+        .aviso-lixeira { background: #efebe9; border: 1px solid #d7ccc8; color: #5d4037; padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; }
+
+        .barra-selecao { background: #fff8e1; border: 1px solid #ffe082; padding: 10px 15px; border-radius: 10px; margin-bottom: 12px; display: none; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .barra-selecao.show { display: flex; }
+        .barra-selecao label { font-size: 13px; color: #555; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .barra-selecao .sel-info { font-weight: bold; color: #e65100; }
+        .barra-selecao .acoes-massa { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+        .barra-selecao button { border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-massa-lixeira { background: #c62828; }
+        .btn-massa-restaurar { background: #2e7d32; }
+        .btn-massa-def { background: #37474f; }
+        .barra-selecao button:disabled { opacity: .5; cursor: not-allowed; }
+
+        .card { position: relative; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 12px; border-left: 5px solid #2e7d32; }
+        .card.selecionado { border-left-color: #c62828; background: #fff5f5; }
+        .card-check { position: absolute; top: 15px; right: 15px; width: 22px; height: 22px; cursor: pointer; }
+        .info h4 { margin: 0 0 5px 0; color: #1b5e20; text-transform: uppercase; padding-right: 30px; }
+        .info p { margin: 0; color: #666; font-size: 13px; line-height: 1.6; }
+        .card-botoes { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        .card-botoes button { border: none; padding: 9px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-download { flex: 1; min-width: 140px; background: #e8f5e9; color: #2e7d32; }
+        .btn-delete { background: #ffebee; color: #c62828; }
+        .btn-restaurar { background: #e8f5e9; color: #2e7d32; }
+        .btn-def { background: #eceff1; color: #37474f; }
+
+        .msg-vazio { text-align: center; color: #888; padding: 30px; }
+        .msg-vazio a { color: #1565c0; }
+
+        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(120px); background: #323232; color: white; padding: 14px 22px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: transform .3s ease; z-index: 999; max-width: 90%; }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+        #toast.erro { background: #c62828; }
+        #toast.ok { background: #2e7d32; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <div class="brand">
+            <div class="logo">🛰️</div>
+            <div>
+                <div class="brand-name">TopoMap</div>
+                <div class="brand-sub" id="subtitulo">Histórico de Levantamentos Ambientais</div>
+            </div>
+        </div>
+        <div class="brand-tag">Painel do Gestor</div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="filtros">
+        <div><label>🔎 Busca livre</label><input type="text" id="fBusca" placeholder="Fazenda, gleba, setor, topógrafo..."></div>
+        <div><label>🍃 Fazenda</label><select id="fFazenda"><option value="">Todas</option></select></div>
+        <div><label>👷 Topógrafo</label><select id="fTopografo"><option value="">Todos</option></select></div>
+        <div><label>📅 De</label><input type="date" id="fDe"></div>
+        <div><label>📅 Até</label><input type="date" id="fAte"></div>
+        <div><label>↕️ Ordenar por</label>
+            <select id="fOrdenar"><option value="data">Data</option><option value="fazenda">Fazenda</option><option value="ocorrencias">Ocorrências</option></select></div>
+        <div><label>⬇️ Sentido</label>
+            <select id="fDirecao"><option value="desc">Maior → menor / recente</option><option value="asc">Menor → maior / antigo</option></select></div>
+    </div>
+
+    <div class="barra-acoes">
+        <button class="btn-reload" id="btnReload" onclick="carregarHistorico()">🔄 Atualizar</button>
+        <button class="btn-csv" onclick="exportarCSV()">📄 Exportar CSV</button>
+        <button class="btn-xlsx" onclick="exportarXLSX()">📊 Exportar Excel</button>
+        <button class="btn-lixeira" id="btnLixeira" onclick="alternarModoLixeira()">🗑️ Ver Lixeira</button>
+    </div>
+
+    <div class="aviso-lixeira" id="avisoLixeira" style="display:none;">
+        🗑️ <b>Lixeira</b> — itens excluídos ficam aqui e são removidos definitivamente após <b>30 dias</b>. Você pode restaurar ou apagar de vez.
+    </div>
+
+    <div class="contador" id="contador"></div>
+
+    <div class="barra-selecao" id="barraSelecao">
+        <label><input type="checkbox" id="chkTodos" onchange="marcarTodos(this.checked)"> Selecionar todos</label>
+        <span class="sel-info" id="selInfo">0 selecionada(s)</span>
+        <div class="acoes-massa" id="acoesMassa"></div>
+    </div>
+
+    <div id="listaHistorico"><div class="estado-vazio"><div class="spinner"></div>Carregando dados da nuvem...</div></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+    const URL_BANCO = "https://radar-topomap-default-rtdb.firebaseio.com/historico_ambiental";
+    const SENHA_GESTOR = "topo2026";
+    const DIAS_LIXEIRA = 30;
+
+    let dadosGlobais = [];
+    let dadosFiltrados = [];
+    let selecionadas = new Set();
+    let modoLixeira = false;
+
+    function esc(v) {
+        if (v === undefined || v === null) return '';
+        return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    function parseData(dataStr, timestamp) {
+        if (timestamp) return new Date(Number(timestamp));
+        if (!dataStr) return null;
+        const p = String(dataStr).split('/');
+        if (p.length === 3) return new Date(`${p[2]}-${p[1]}-${p[0]}T00:00:00`);
+        return null;
+    }
+    function formatarData(d) { return (!d || isNaN(d)) ? '--' : d.toLocaleDateString('pt-BR'); }
+    function numOuVazio(v) { const n = Number(v); return isNaN(n) ? '' : n; }
+    function estaNaLixeira(d) { return !!d.excluidoEm; }
+    function toast(msg, tipo) {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : '');
+        clearTimeout(t._tmr); t._tmr = setTimeout(() => { t.className = ''; }, 3000);
+    }
+
+    async function carregarHistorico() {
+        const div = document.getElementById('listaHistorico');
+        const btn = document.getElementById('btnReload');
+        btn.disabled = true; btn.textContent = '⏳...';
+        div.innerHTML = '<div class="estado-vazio"><div class="spinner"></div>Carregando dados da nuvem...</div>';
+        try {
+            const res = await fetch(URL_BANCO + ".json?t=" + Date.now());
+            const dados = await res.json();
+            if (!dados) { dadosGlobais = []; popularFiltros(); aplicarFiltros(); return; }
+            dadosGlobais = Object.keys(dados).map(k => ({ ...dados[k], idF: k }));
+            await limparLixeiraAntiga();
+            popularFiltros(); aplicarFiltros();
+            toast('Base atualizada ✔', 'ok');
+        } catch (e) {
+            div.innerHTML = '<p class="msg-vazio" style="color:red;">Erro ao conectar com o banco de dados.</p>';
+            toast('Erro ao conectar com o banco', 'erro');
+        } finally { btn.disabled = false; btn.textContent = '🔄 Atualizar'; }
+    }
+
+    async function limparLixeiraAntiga() {
+        const limite = Date.now() - DIAS_LIXEIRA * 864e5;
+        const vencidos = dadosGlobais.filter(d => d.excluidoEm && Number(d.excluidoEm) < limite);
+        if (!vencidos.length) return;
+        try {
+            await Promise.all(vencidos.map(d => fetch(`${URL_BANCO}/${d.idF}.json`, { method: 'DELETE' })));
+            const ids = new Set(vencidos.map(v => v.idF));
+            dadosGlobais = dadosGlobais.filter(d => !ids.has(d.idF));
+        } catch (e) {}
+    }
+
+    function popularFiltros() {
+        const selF = document.getElementById('fFazenda');
+        const selT = document.getElementById('fTopografo');
+        const ativos = dadosGlobais.filter(d => !estaNaLixeira(d));
+        const fazendas = [...new Set(ativos.map(d => d.fazenda).filter(Boolean))].sort();
+        const topos = [...new Set(ativos.map(d => d.topografo).filter(Boolean))].sort();
+        const atual = { f: selF.value, t: selT.value };
+        selF.innerHTML = '<option value="">Todas</option>' + fazendas.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+        selT.innerHTML = '<option value="">Todos</option>' + topos.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+        selF.value = atual.f; selT.value = atual.t;
+    }
+
+    function aplicarFiltros() {
+        const busca = document.getElementById('fBusca').value.trim().toLowerCase();
+        const fFaz = document.getElementById('fFazenda').value;
+        const fTop = document.getElementById('fTopografo').value;
+        const de = document.getElementById('fDe').value ? new Date(document.getElementById('fDe').value + 'T00:00:00') : null;
+        const ate = document.getElementById('fAte').value ? new Date(document.getElementById('fAte').value + 'T23:59:59') : null;
+        const ordenar = document.getElementById('fOrdenar').value;
+        const direcao = document.getElementById('fDirecao').value === 'asc' ? 1 : -1;
+
+        dadosFiltrados = dadosGlobais.filter(d => {
+            if (modoLixeira !== estaNaLixeira(d)) return false;
+            if (fFaz && d.fazenda !== fFaz) return false;
+            if (fTop && d.topografo !== fTop) return false;
+            const dt = parseData(d.data, d.timestamp);
+            if (de && (!dt || dt < de)) return false;
+            if (ate && (!dt || dt > ate)) return false;
+            if (busca) {
+                const alvo = [d.titulo, d.fazenda, d.gleba, d.setor, d.topografo].join(' ').toLowerCase();
+                if (!alvo.includes(busca)) return false;
+            }
+            return true;
+        });
+
+        dadosFiltrados.sort((a, b) => {
+            let va, vb;
+            if (ordenar === 'fazenda') { va = (a.fazenda || '').toLowerCase(); vb = (b.fazenda || '').toLowerCase(); return va < vb ? -direcao : va > vb ? direcao : 0; }
+            if (ordenar === 'ocorrencias') { va = Number(a.qtdPontos) || 0; vb = Number(b.qtdPontos) || 0; }
+            else { va = +(parseData(a.data, a.timestamp) || 0); vb = +(parseData(b.data, b.timestamp) || 0); }
+            return (va - vb) * direcao;
+        });
+
+        renderizarLista(); atualizarStats();
+    }
+
+    function limparFiltros() {
+        ['fBusca','fFazenda','fTopografo','fDe','fAte'].forEach(id => document.getElementById(id).value = '');
+        aplicarFiltros();
+    }
+
+    function renderizarLista() {
+        const div = document.getElementById('listaHistorico');
+        const cont = document.getElementById('contador');
+        if (dadosFiltrados.length === 0) {
+            div.innerHTML = modoLixeira ? '<div class="estado-vazio"><span class="icone">🗑️</span>A lixeira está vazia.</div>'
+                : '<div class="estado-vazio"><span class="icone">🔍</span>Nenhum laudo encontrado.<br><a href="#" onclick="limparFiltros();return false;">Limpar filtros</a></div>';
+            cont.textContent = ''; document.getElementById('barraSelecao').classList.remove('show'); return;
+        }
+        const totalUniverso = dadosGlobais.filter(d => modoLixeira === estaNaLixeira(d)).length;
+        cont.textContent = `📁 ${dadosFiltrados.length} laudo(s)` + (dadosFiltrados.length !== totalUniverso ? ` (de ${totalUniverso})` : '');
+
+        div.innerHTML = dadosFiltrados.map((d, i) => {
+            const titulo = d.titulo ? '📄 ' + esc(d.titulo) : '🍃 Faz. ' + esc(d.fazenda);
+            const dataFmt = formatarData(parseData(d.data, d.timestamp));
+            const setor = (d.setor && d.setor !== '-') ? ` | Setor: ${esc(d.setor)}` : '';
+            const marcado = selecionadas.has(d.idF);
+            let botoes;
+            if (modoLixeira) {
+                const quando = d.excluidoEm ? formatarData(new Date(Number(d.excluidoEm))) : '--';
+                botoes = `<button class="btn-restaurar" onclick="restaurar('${esc(d.idF)}')">♻️ Restaurar</button>
+                    <button class="btn-def" onclick="excluirDefinitivo('${esc(d.idF)}')">❌ Excluir definitivo</button>
+                    <span style="font-size:12px;color:#999;align-self:center;">Excluído em ${quando}</span>`;
+            } else {
+                botoes = `<button class="btn-download" onclick="baixarPDF(${i})">📥 Baixar PDF</button>
+                    <button class="btn-delete" onclick="moverParaLixeira('${esc(d.idF)}')">🗑️</button>`;
+            }
+            return `<div class="card ${marcado ? 'selecionado' : ''}" id="card-${esc(d.idF)}">
+                <input type="checkbox" class="card-check" ${marcado ? 'checked' : ''} onchange="alternarSelecao('${esc(d.idF)}', this.checked)" title="Selecionar">
+                <div class="info">
+                    <h4>${titulo}</h4>
+                    <p>📍 Fazenda: <b>${esc(d.fazenda)}</b> | Gleba: ${esc(d.gleba)}${setor}</p>
+                    <p>👷 Topógrafo: <b>${esc(d.topografo)}</b></p>
+                    <p>📅 ${dataFmt} às ${esc(d.hora)} | 📍 Ocorrências: <b>${esc(d.qtdPontos)}</b></p>
+                </div>
+                <div class="card-botoes">${botoes}</div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('barraSelecao').classList.add('show');
+        const idsVisiveis = new Set(dadosFiltrados.map(d => d.idF));
+        [...selecionadas].forEach(id => { if (!idsVisiveis.has(id)) selecionadas.delete(id); });
+        renderAcoesMassa(); atualizarBarraSelecao();
+    }
+
+    function alternarSelecao(id, marcado) {
+        if (marcado) selecionadas.add(id); else selecionadas.delete(id);
+        const card = document.getElementById('card-' + id);
+        if (card) card.classList.toggle('selecionado', marcado);
+        atualizarBarraSelecao();
+    }
+    function marcarTodos(marcado) {
+        selecionadas.clear();
+        if (marcado) dadosFiltrados.forEach(d => selecionadas.add(d.idF));
+        renderizarLista();
+    }
+    function renderAcoesMassa() {
+        document.getElementById('acoesMassa').innerHTML = modoLixeira
+            ? `<button class="btn-massa-restaurar" onclick="restaurarSelecionadas()">♻️ Restaurar</button>
+               <button class="btn-massa-def" onclick="excluirDefSelecionadas()">❌ Excluir definitivo</button>`
+            : `<button class="btn-massa-lixeira" onclick="lixeiraSelecionadas()">🗑️ Mover para lixeira</button>`;
+    }
+    function atualizarBarraSelecao() {
+        const n = selecionadas.size;
+        document.getElementById('selInfo').textContent = `${n} selecionada(s)`;
+        document.querySelectorAll('#acoesMassa button').forEach(b => b.disabled = n === 0);
+        const chkTodos = document.getElementById('chkTodos');
+        if (chkTodos) chkTodos.checked = dadosFiltrados.length > 0 && n === dadosFiltrados.length;
+    }
+
+    function pedirSenha() { return prompt("Senha de Gestor:") === SENHA_GESTOR; }
+    async function patch(id, corpo) {
+        await fetch(`${URL_BANCO}/${id}.json`, { method: 'PATCH', body: JSON.stringify(corpo) });
+        const item = dadosGlobais.find(d => d.idF === id);
+        if (item) Object.assign(item, corpo);
+    }
+    async function moverParaLixeira(id) {
+        if (!pedirSenha()) return toast('Senha incorreta', 'erro');
+        try { await patch(id, { excluidoEm: Date.now() }); toast('Movido para a lixeira ✔', 'ok'); aplicarFiltros(); }
+        catch (e) { toast('Erro ao mover', 'erro'); }
+    }
+    async function restaurar(id) {
+        try { await patch(id, { excluidoEm: null }); toast('Laudo restaurado ✔', 'ok'); popularFiltros(); aplicarFiltros(); }
+        catch (e) { toast('Erro ao restaurar', 'erro'); }
+    }
+    async function excluirDefinitivo(id) {
+        if (!confirm('Apagar DEFINITIVAMENTE? Não dá para desfazer.')) return;
+        if (!pedirSenha()) return toast('Senha incorreta', 'erro');
+        try { await fetch(`${URL_BANCO}/${id}.json`, { method: 'DELETE' });
+            dadosGlobais = dadosGlobais.filter(d => d.idF !== id);
+            toast('Excluído definitivamente ✔', 'ok'); aplicarFiltros();
+        } catch (e) { toast('Erro ao excluir', 'erro'); }
+    }
+    async function lixeiraSelecionadas() {
+        const ids = [...selecionadas]; if (!ids.length) return;
+        if (!confirm(`Mover ${ids.length} laudo(s) para a lixeira?`)) return;
+        if (!pedirSenha()) return toast('Senha incorreta', 'erro');
+        try { await Promise.all(ids.map(id => patch(id, { excluidoEm: Date.now() })));
+            toast(`${ids.length} movido(s) para a lixeira ✔`, 'ok'); selecionadas.clear(); aplicarFiltros();
+        } catch (e) { toast('Erro ao mover', 'erro'); }
+    }
+    async function restaurarSelecionadas() {
+        const ids = [...selecionadas]; if (!ids.length) return;
+        try { await Promise.all(ids.map(id => patch(id, { excluidoEm: null })));
+            toast(`${ids.length} restaurado(s) ✔`, 'ok'); selecionadas.clear(); popularFiltros(); aplicarFiltros();
+        } catch (e) { toast('Erro ao restaurar', 'erro'); }
+    }
+    async function excluirDefSelecionadas() {
+        const ids = [...selecionadas]; if (!ids.length) return;
+        if (!confirm(`Apagar DEFINITIVAMENTE ${ids.length} laudo(s)? Não dá para desfazer.`)) return;
+        if (!pedirSenha()) return toast('Senha incorreta', 'erro');
+        try { await Promise.all(ids.map(id => fetch(`${URL_BANCO}/${id}.json`, { method: 'DELETE' })));
+            const set = new Set(ids); dadosGlobais = dadosGlobais.filter(d => !set.has(d.idF));
+            toast(`${ids.length} excluído(s) definitivamente ✔`, 'ok'); selecionadas.clear(); aplicarFiltros();
+        } catch (e) { toast('Erro ao excluir', 'erro'); }
+    }
+
+    function alternarModoLixeira() {
+        modoLixeira = !modoLixeira; selecionadas.clear();
+        document.getElementById('btnLixeira').classList.toggle('ativo', modoLixeira);
+        document.getElementById('btnLixeira').textContent = modoLixeira ? '↩️ Voltar ao histórico' : '🗑️ Ver Lixeira';
+        document.getElementById('avisoLixeira').style.display = modoLixeira ? 'block' : 'none';
+        document.getElementById('subtitulo').textContent = modoLixeira ? '🗑️ Lixeira: Ambiental' : 'Histórico de Levantamentos Ambientais';
+        aplicarFiltros();
+    }
+
+    function atualizarStats() {
+        const base = dadosFiltrados;
+        document.getElementById('stats').innerHTML = `
+            <div class="stat-box"><div class="num">${base.length}</div><div class="lbl">Laudos</div></div>
+            <div class="stat-box"><div class="num">${new Set(base.map(d => d.fazenda).filter(Boolean)).size}</div><div class="lbl">Fazendas</div></div>
+            <div class="stat-box"><div class="num">${new Set(base.map(d => d.topografo).filter(Boolean)).size}</div><div class="lbl">Topógrafos</div></div>
+            <div class="stat-box"><div class="num">${base.reduce((s, d) => s + (Number(d.qtdPontos) || 0), 0)}</div><div class="lbl">Ocorrências</div></div>`;
+    }
+
+    const COLS = [
+        { h: 'Titulo',      get: d => d.titulo || '',        num: false },
+        { h: 'Fazenda',     get: d => d.fazenda || '',       num: false },
+        { h: 'Gleba',       get: d => d.gleba || '',         num: false },
+        { h: 'Setor',       get: d => d.setor || '',         num: false },
+        { h: 'Topografo',   get: d => d.topografo || '',     num: false },
+        { h: 'Data',        get: d => formatarData(parseData(d.data, d.timestamp)), num: false },
+        { h: 'Hora',        get: d => d.hora || '',          num: false },
+        { h: 'Ocorrencias', get: d => numOuVazio(d.qtdPontos), num: true },
+    ];
+    function baseExportacao() { return dadosFiltrados.length ? dadosFiltrados : dadosGlobais.filter(d => !estaNaLixeira(d)); }
+
+    function exportarCSV() {
+        const base = baseExportacao(); if (!base.length) return toast('Nada para exportar', 'erro');
+        const linhas = [COLS.map(c => c.h), ...base.map(d => COLS.map(c => c.get(d)))];
+        const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+        baixarBlob(new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }), 'csv');
+        toast(`${base.length} registro(s) exportado(s) ✔`, 'ok');
+    }
+    function exportarXLSX() {
+        const base = baseExportacao(); if (!base.length) return toast('Nada para exportar', 'erro');
+        const rows = [COLS.map(c => ({ v: c.h, num: false })), ...base.map(d => COLS.map(c => ({ v: c.get(d), num: c.num })))];
+        baixarBlob(construirXLSX(rows, 'Ambiental'), 'xlsx');
+        toast(`${base.length} registro(s) exportado(s) ✔`, 'ok');
+    }
+    function baixarBlob(blob, ext) {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Historico_Ambiental_${new Date().toISOString().slice(0, 10)}.${ext}`;
+        link.click(); URL.revokeObjectURL(link.href);
+    }
+
+    function xmlEsc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function colLetra(n) { let s = ''; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26; } return s; }
+    function construirXLSX(rows, nomeAba) {
+        let sheet = '';
+        rows.forEach((row, r) => {
+            sheet += `<row r="${r + 1}">`;
+            row.forEach((cell, c) => {
+                const ref = colLetra(c) + (r + 1);
+                const estilo = r === 0 ? ' s="1"' : '';
+                if (r !== 0 && cell.num && cell.v !== '' && cell.v !== null && !isNaN(Number(cell.v))) sheet += `<c r="${ref}"${estilo} t="n"><v>${Number(cell.v)}</v></c>`;
+                else sheet += `<c r="${ref}"${estilo} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(cell.v)}</t></is></c>`;
+            });
+            sheet += `</row>`;
+        });
+        const larguras = [24, 18, 12, 12, 16, 12, 8, 12];
+        const cols = '<cols>' + larguras.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>';
+        const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${sheet}</sheetData></worksheet>`;
+        const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1B5E20"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+        const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+        const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+        const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(nomeAba)}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+        const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+        return zipar([
+            { nome: '[Content_Types].xml', txt: contentTypes },
+            { nome: '_rels/.rels', txt: rels },
+            { nome: 'xl/workbook.xml', txt: workbook },
+            { nome: 'xl/_rels/workbook.xml.rels', txt: wbRels },
+            { nome: 'xl/styles.xml', txt: styles },
+            { nome: 'xl/worksheets/sheet1.xml', txt: sheetXml },
+        ]);
+    }
+    function crc32(buf) { let crc = ~0; for (let i = 0; i < buf.length; i++) { crc ^= buf[i]; for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); } return ~crc >>> 0; }
+    function zipar(arquivos) {
+        const enc = new TextEncoder(); const chunks = [], central = []; let offset = 0;
+        for (const a of arquivos) {
+            const nome = enc.encode(a.nome), dados = enc.encode(a.txt), crc = crc32(dados);
+            const lh = new DataView(new ArrayBuffer(30));
+            lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true); lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
+            lh.setUint32(14, crc, true); lh.setUint32(18, dados.length, true); lh.setUint32(22, dados.length, true); lh.setUint16(26, nome.length, true); lh.setUint16(28, 0, true);
+            chunks.push(new Uint8Array(lh.buffer), nome, dados);
+            const cd = new DataView(new ArrayBuffer(46));
+            cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0, true); cd.setUint16(10, 0, true); cd.setUint16(12, 0, true); cd.setUint16(14, 0, true);
+            cd.setUint32(16, crc, true); cd.setUint32(20, dados.length, true); cd.setUint32(24, dados.length, true); cd.setUint16(28, nome.length, true); cd.setUint16(30, 0, true); cd.setUint16(32, 0, true);
+            cd.setUint16(34, 0, true); cd.setUint16(36, 0, true); cd.setUint32(38, 0, true); cd.setUint32(42, offset, true);
+            central.push({ head: new Uint8Array(cd.buffer), nome }); offset += 30 + nome.length + dados.length;
+        }
+        const inicioCentral = offset; let tamCentral = 0;
+        for (const c of central) { chunks.push(c.head, c.nome); tamCentral += c.head.length + c.nome.length; }
+        const eo = new DataView(new ArrayBuffer(22));
+        eo.setUint32(0, 0x06054b50, true); eo.setUint16(4, 0, true); eo.setUint16(6, 0, true); eo.setUint16(8, arquivos.length, true); eo.setUint16(10, arquivos.length, true);
+        eo.setUint32(12, tamCentral, true); eo.setUint32(16, inicioCentral, true); eo.setUint16(20, 0, true);
+        chunks.push(new Uint8Array(eo.buffer));
+        return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+
+    function baixarPDF(i) {
+        const d = dadosFiltrados[i];
+        if (d.pdfUrl) { window.open(d.pdfUrl, '_blank'); return; }
+        if (!d.arquivoPDF) { toast("Este laudo não possui PDF anexado.", 'erro'); return; }
+        const link = document.createElement("a");
+        link.href = `data:application/pdf;base64,${d.arquivoPDF}`;
+        let nome = (d.titulo || `Laudo_Ambiental_${d.fazenda}`).replace(/[^a-z0-9]/gi, '_');
+        link.download = `${nome}_${formatarData(parseData(d.data, d.timestamp)).replace(/\//g, '-')}.pdf`;
+        link.click();
+    }
+
+    ['fBusca','fFazenda','fTopografo','fDe','fAte','fOrdenar','fDirecao'].forEach(id => {
+        document.getElementById(id).addEventListener('input', aplicarFiltros);
+    });
+    window.onload = carregarHistorico;
+</script>
+</body>
+</html>

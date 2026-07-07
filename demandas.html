@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TopoMap - Gestão Profissional</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 15px; background-color: #f4f6f8; margin: 0; padding-bottom: 80px; }
+        .container { max-width: 600px; margin: auto; }
+        h2 { text-align: center; color: #1a73e8; margin: 10px 0 5px 0; cursor: pointer; user-select: none; }
+        .topbar { background: linear-gradient(135deg, #0a3d0a, #1b5e20); color: #fff; padding: 14px 18px; border-radius: 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.15); position: relative; overflow: hidden; }
+        .topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, #fbc02d, #4caf50, #fbc02d); }
+        .topbar .logo { width: 40px; height: 40px; border-radius: 11px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 21px; flex-shrink: 0; }
+        .topbar .brand-name { font-size: 18px; font-weight: 800; letter-spacing: .5px; line-height: 1.1; }
+        .topbar .brand-sub { font-size: 12.5px; font-weight: 600; opacity: .92; margin-top: 2px; cursor: pointer; user-select: none; }
+        
+        .seletor-unidade { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .uni-btn { flex: 1; padding: 10px; border-radius: 20px; border: 2px solid #1a73e8; background: white; color: #1a73e8; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .uni-btn.active { background: #1a73e8; color: white; box-shadow: 0 4px 8px rgba(26, 115, 232, 0.3); }
+
+        .btn-mapa-geral { width: 100%; padding: 12px; background: #455a64; color: white; font-weight: bold; border: none; border-radius: 12px; font-size: 14px; cursor: pointer; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        /* ESTILOS DO DASHBOARD */
+        .dash-pendente { background: #fff; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-around; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-bottom: 4px solid #ff9800; text-align: center; }
+        .dash-item span { font-size: 11px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .dash-item h3 { margin: 2px 0 0 0; color: #ff9800; font-size: 20px; }
+
+        .kpi-row { display: flex; gap: 10px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; page-break-inside: avoid; }
+        .kpi-card { flex: 1; background: #fff; padding: 15px; border-radius: 12px; min-width: 130px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-top: 4px solid #1a73e8; }
+        .kpi-card span { font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .kpi-card h3 { margin: 5px 0 0 0; font-size: 24px; color: #1a73e8; }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
+        .chart-container { background: #fff; border-radius: 12px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; height: 250px; page-break-inside: avoid; }
+        .chart-title { font-size: 13px; font-weight: bold; color: #455a64; margin-bottom: 10px; text-transform: uppercase; text-align: center; }
+
+        .botoes-topo { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        .btn { flex: 1; padding: 15px 5px; border-radius: 10px; font-weight: bold; cursor: pointer; border: none; color: white; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; min-width: 30%; }
+        .btn-blue { background: #1a73e8; } .btn-green { background: #34a853; } .btn-dark { background: #455a64; } .btn-red { background: #b71c1c; } .btn-orange { background: #ef6c00; }
+        
+        .abas { display: flex; gap: 3px; margin-bottom: 10px; background: #e0e0e0; padding: 5px; border-radius: 10px; }
+        .aba-btn { flex: 1; text-align: center; padding: 10px 2px; cursor: pointer; border-radius: 8px; font-size: 12px; font-weight: bold; color: #666; transition: 0.3s; }
+        .aba-ativa { background: #ff9800; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        
+        .filtros-cat { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; scrollbar-width: none; }
+        .btn-cat { background: white; border: 1px solid #ccc; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; color: #555; white-space: nowrap; cursor: pointer; }
+        .btn-cat.ativo { background: #1a73e8; color: white; border-color: #0d47a1; }
+
+        .filtro-setor-container { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; background: #fff; padding: 10px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); overflow-x: auto; }
+        .label-setor { font-size: 12px; font-weight: bold; color: #1a73e8; white-space: nowrap; }
+        .btn-setor { min-width: 35px; height: 35px; border-radius: 50%; border: 1px solid #ddd; background: #f9f9f9; font-weight: bold; color: #777; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+        .btn-setor.ativo { background: #1a73e8; color: white; border-color: #0d47a1; }
+        
+        .cartao { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 6px solid #ff9800; margin-bottom: 12px; position: relative; page-break-inside: avoid; }
+        .tag-tipo { position: absolute; top: 15px; right: 15px; font-size: 11px; background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 6px; font-weight: bold; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: flex-end; justify-content: center; }
+        .modal-content { background: white; width: 100%; padding: 20px; border-top-left-radius: 20px; border-top-right-radius: 20px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; max-width: 600px;}
+        input, select { width: 100%; padding: 12px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #f9f9f9; }
+        .readonly { background: #e0e0e0 !important; color: #555; font-weight: bold; }
+        
+        .row-kml { display: flex; gap: 10px; margin-top: 10px; }
+        .row-kml > div { flex: 1; }
+        .row-kml label { font-size: 12px; font-weight: bold; color: #444; }
+
+        .toggle-manual { display: flex; background: #e0e0e0; border-radius: 8px; padding: 4px; margin-bottom: 15px; }
+        .toggle-manual button { flex: 1; border: none; padding: 10px; font-weight: bold; border-radius: 6px; cursor: pointer; background: transparent; color: #666; transition: 0.2s; }
+        .toggle-manual button.ativo { background: white; color: #1a73e8; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        .grid-talhoes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; margin-bottom: 15px; max-height: 200px; overflow-y: auto; padding: 5px; }
+        .btn-talhao { background: #f1f8e9; border: 1px solid #c5e1a5; padding: 10px 5px; border-radius: 8px; text-align: center; font-weight: bold; color: #33691e; cursor: pointer; user-select: none; transition: 0.2s; font-size: 14px; }
+        .btn-talhao.selecionado { background: #25D366; color: white; border-color: #1b9e4b; transform: scale(0.95); }
+        
+        #mapaManual, #mapaKml, #mapaFinalizar { height: 280px; width: 100%; border-radius: 8px; border: 2px solid #ccc; margin-top: 10px; margin-bottom: 10px; display: none; }
+        .label-talhao { background: rgba(255, 255, 255, 0.9); border: 1px solid #666; box-shadow: 0 1px 3px rgba(0,0,0,0.3); font-weight: bold; color: #111; font-size: 13px; padding: 2px 6px; border-radius: 4px; }
+        
+        .check-todos { display: flex; align-items: center; gap: 8px; background: #e8f0fe; padding: 10px; border-radius: 8px; border: 1px solid #bbdefb; margin-top: 10px; cursor: pointer; }
+        .check-todos input { width: auto; margin: 0; transform: scale(1.3); }
+        .check-todos span { color: #1565c0; font-weight: bold; font-size: 14px; }
+
+        /* Estilo Exclusivo para Exportação PDF (Evita cortes) */
+        body.printing-dash #areaExportarPDF { width: 800px !important; margin: 0 auto; padding: 20px; background: #f4f6f8; }
+        body.printing-dash .dashboard-grid { grid-template-columns: 1fr 1fr; } 
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="topbar">
+        <div class="logo">🛰️</div>
+        <div>
+            <div class="brand-name">TopoMap</div>
+            <div class="brand-sub" id="tituloApp" onclick="ativarModoGestor()">📋 Gestão de Demandas — toque para Modo Gestor</div>
+        </div>
+    </div>
+    
+    <div class="seletor-unidade">
+        <button id="btnIVI" class="uni-btn active" onclick="setUnidade('IVI')">IVI - IVINHEMA</button>
+        <button id="btnANG" class="uni-btn" onclick="setUnidade('ANG')">ANG - ANGÉLICA</button>
+    </div>
+
+    <button class="btn-mapa-geral" onclick="abrirModal('modalBanco')">🗺️ Carregar Mapa da Usina (.ZIP)</button>
+
+    <div class="botoes-topo" id="painelGestao" style="display:none;">
+        <button class="btn btn-blue" onclick="abrirDemandaManual()">➕ Lançar Demanda</button>
+        <button class="btn btn-green" onclick="abrirModal('modalImportar')">📥 Importar Planilha</button>
+        <button class="btn" style="background:#00897b;" onclick="fazerBackup()">💾 Backup</button>
+        <button class="btn" style="background:#5e35b1;" onclick="document.getElementById('inputRestore').click()">♻️ Restaurar</button>
+        <button class="btn btn-orange" onclick="zerarUnidadeAtual()">🧹 Limpar Unidade</button>
+        <button class="btn btn-dark" onclick="zerarSistemaTudo()">🚨 Zerar TUDO Geral</button>
+        <input type="file" id="inputRestore" accept=".json" style="display:none" onchange="restaurarBackup(event)">
+    </div>
+    
+    <div class="abas">
+        <div id="tabP" class="aba-btn aba-ativa" onclick="mudarTab('pendente')">Fila</div>
+        <div id="tabA" class="aba-btn" onclick="mudarTab('andamento')">Em Execução</div>
+        <div id="tabC" class="aba-btn" onclick="mudarTab('concluido')">Histórico</div>
+        <div id="tabX" class="aba-btn" onclick="mudarTab('cancelado')">Cancelados</div>
+    </div>
+
+    <div class="filtro-setor-container">
+        <span class="label-setor">Setores:</span>
+        <button class="btn-setor" id="s1" onclick="toggleSetor(1)">1</button>
+        <button class="btn-setor" id="s2" onclick="toggleSetor(2)">2</button>
+        <button class="btn-setor" id="s3" onclick="toggleSetor(3)">3</button>
+        <button class="btn-setor" id="s4" onclick="toggleSetor(4)">4</button>
+        <button class="btn-setor" id="s5" onclick="toggleSetor(5)">5</button>
+        <button class="btn-setor" id="s6" onclick="toggleSetor(6)">6</button>
+        <button class="btn-setor" id="s7" onclick="toggleSetor(7)">7</button>
+        <button class="btn-setor" id="s8" onclick="toggleSetor(8)">8</button>
+    </div>
+
+    <div id="barraFiltros" class="filtros-cat"></div>
+    
+    <div id="areaExportarPDF" style="width: 100%; background: transparent;">
+        <div id="statusDashboard"></div>
+        <div id="lista-demandas"></div>
+    </div>
+</div>
+
+<div class="modal" id="modalNova">
+    <div class="modal-content">
+        <h3>➕ Lançar Nova Demanda</h3>
+        <div class="toggle-manual">
+            <button id="btnModoCadastrada" class="ativo" onclick="alternarModoManual('cadastrada')">🌾 Área da Usina (SHP)</button>
+            <button id="btnModoAvulso" onclick="alternarModoManual('avulso')">🚨 Serviço Avulso</button>
+        </div>
+        <select id="mUni" style="margin-bottom:15px;"><option value="IVI">Unidade: IVINHEMA</option><option value="ANG">Unidade: ANGÉLICA</option></select>
+        <div id="formCadastrada">
+            <label style="font-size:12px; font-weight:bold;">Fazenda (Código):</label>
+            <select id="selFazendaM" onchange="atualizarFazendaM()"><option value="">Aguardando mapa...</option></select>
+            <input type="text" id="mNomeFaz" class="readonly" readonly placeholder="Nome da Área Automático">
+            <label style="font-size:12px; font-weight:bold; margin-top:10px;">Gleba:</label>
+            <select id="selGlebaM" disabled onchange="atualizarGlebaM()"><option value="">Selecione a Fazenda primeiro</option></select>
+            <div id="mapaManual"></div>
+            <label class="check-todos" id="lblCheckTodosM" style="display:none;">
+                <input type="checkbox" id="checkTodosM" onchange="toggleTodosTalhoesM()">
+                <span>Selecionar TODOS os talhões da gleba</span>
+            </label>
+            <div class="grid-talhoes" id="boxTalhoesM"><div style="grid-column: span 5; text-align: center; color: #888; font-size: 14px;">Aguardando Gleba...</div></div>
+        </div>
+        <div id="formAvulso" style="display:none; background:#fff3e0; padding:15px; border-radius:8px; border:1px solid #ffcc80; margin-bottom:15px;">
+            <p style="font-size:12px; color:#e65100; font-weight:bold; margin-top:0;">Registre áreas de expansão, fogo, etc.</p>
+            <input type="text" id="mFazAvulso" placeholder="Nome do Local (Ex: Faz. São João Expansão)" style="border-color:#ffb74d;">
+            <input type="text" id="mDescAvulso" placeholder="Descrição Opcional (Ex: Mapeamento de Fogo)" style="border-color:#ffb74d;">
+        </div>
+        <label style="font-size:12px; font-weight:bold;">Setor Referência (1-8):</label>
+        <select id="mSetor">
+            <option value="1">Setor 1</option><option value="2">Setor 2</option><option value="3">Setor 3</option><option value="4">Setor 4</option>
+            <option value="5">Setor 5</option><option value="6">Setor 6</option><option value="7">Setor 7</option><option value="8">Setor 8</option>
+        </select>
+        <label style="font-size:12px; font-weight:bold; margin-top:10px;">Hectares (Estimativa inicial):</label>
+        <input type="number" id="mAreaManual" step="0.01" placeholder="0.00 ha">
+        <p id="txtAreaAviso" style="font-size:11px; color:#666; margin-top:0;">*A área real você ajustará ao clicar em Finalizar o voo.</p>
+        <input type="number" id="mDiasManual" placeholder="Dias para Prioridade na Fila (Opcional)" style="margin-bottom:10px;">
+        <label style="font-size:12px; font-weight:bold;">Tipo de Serviço:</label>
+        <select id="mTipo" style="border: 2px solid #1a73e8; font-weight:bold;">
+            <option>Cana Planta</option><option>Cana Soca</option><option>Daninhas</option><option>Pontos Check</option>
+            <option>Mapeamento de Fogo</option><option>Expansão de Área</option><option>Volume/Aterro</option>
+            <option>Planialtimétrico</option><option>Outros</option>
+        </select>
+        <label style="display:flex; align-items:center; gap:8px; background:#ffebee; padding:10px; border-radius:8px; border:1px solid #ffcdd2; margin-top:15px; cursor:pointer;">
+            <input type="checkbox" id="mRetrabalho" style="width:auto; margin:0; transform:scale(1.3);">
+            <span style="color:#c62828; font-weight:bold; font-size:14px;">🔄 Marcar como Remapeamento (Retrabalho)</span>
+        </label>
+        <button class="btn btn-blue" style="width:100%; margin-top:15px; padding:15px; font-size:16px;" onclick="salvarDemandaManual()">🚀 Salvar no Sistema</button>
+        <button onclick="fecharModais()" style="width:100%; background:none; border:none; padding:15px; font-weight:bold; color:#666;">Cancelar</button>
+    </div>
+</div>
+
+<div class="modal" id="modalFinalizar">
+    <div class="modal-content">
+        <h3>✅ Confirmar Execução</h3>
+        <p id="fInfo" style="font-weight:bold; color:#1a73e8; margin-bottom:5px; font-size:14px;"></p>
+        <div id="blocoFinalizarCadastrada">
+            <label style="font-size:12px; font-weight:bold; color:#2e7d32; display:block; margin-top:10px;">Ajuste os talhões efetivamente voados:</label>
+            <div id="mapaFinalizar"></div>
+            <label class="check-todos" id="lblCheckTodosFin" style="display:none;">
+                <input type="checkbox" id="checkTodosFin" onchange="toggleTodosTalhoesFin()">
+                <span style="color:#2e7d32;">Selecionar TODOS os talhões da Gleba</span>
+            </label>
+            <div class="grid-talhoes" id="boxTalhoesFin"></div>
+            <div style="background:#e8f5e9; padding:10px; border-radius:8px; margin-top:10px; border: 1px solid #c5e1a5; display: flex; justify-content: space-between; align-items: center;">
+                <b style="color:#2e7d32; font-size: 14px;">Área Final:</b>
+                <span id="txtAreaFinalCalc" style="font-size: 18px; font-weight: bold; color: #1b5e20;">0.00 ha</span>
+            </div>
+            <div id="boxMotivoFalta" style="display:none; background:#fff3e0; padding:10px; border-radius:8px; border:1px solid #ffcc80; margin-top:10px;">
+                <label style="color:#e65100; font-weight:bold; font-size:13px;">⚠️ Motivo da falta (Talhões não feitos):</label> 
+                <input type="text" id="fMotivo" placeholder="Ex: Cana alta, chuva, estrada ruim...">
+            </div>
+        </div>
+        <div id="blocoFinalizarAvulso" style="display:none;">
+            <label style="font-weight:bold; font-size:14px; display:block; color:#1565c0; margin-top:15px;">📐 ÁREA FINAL REALIZADA NO VOO (ha):</label> 
+            <input type="number" id="fAreaAvulsa" step="0.01" style="border: 2px solid #1565c0; font-size: 20px; font-weight:bold; color:#1565c0; background:#e3f2fd;">
+            <p style="font-size:11px; color:#666; margin-top:5px;">Preencha com o total exato gerado no plano de voo do drone para contabilizar no histórico.</p>
+        </div>
+        <button class="btn btn-green" style="width:100%; margin-top:15px; padding:15px;" onclick="confirmarFinalizacao()">Confirmar Finalização</button>
+        <button onclick="fecharModais()" style="width:100%; background:none; border:none; padding:15px; color:#666; font-weight:bold;">Cancelar</button>
+    </div>
+</div>
+
+<div class="modal" id="modalKML">
+    <div class="modal-content">
+        <h3>📍 Baixar KML de Voo</h3>
+        <p id="kmlInfo" style="font-weight:bold; color:#1a73e8; margin-bottom:5px; font-size:14px;"></p>
+        <label style="font-size:12px; font-weight:bold; color:#6a1b9a; display:block; margin-top:10px;">Ajustar Talhões para o Voo:</label>
+        <div id="mapaKml"></div>
+        <label class="check-todos" id="lblCheckTodosKml" style="display:none;">
+            <input type="checkbox" id="checkTodosKml" onchange="toggleTodosTalhoesKml()">
+            <span style="color:#6a1b9a;">Selecionar TODOS os talhões da Gleba</span>
+        </label>
+        <div class="grid-talhoes" id="boxTalhoesKml"></div>
+        <div class="row-kml">
+            <div>
+                <label>Buffer (Margem):</label>
+                <select id="kmlBuffer"><option value="0">0m (Exato)</option><option value="50" selected>50 metros</option><option value="70">70 metros</option><option value="100">100 metros</option></select>
+            </div>
+            <div>
+                <label>Simplificação:</label>
+                <select id="kmlSimplificacao"><option value="0">Nenhuma</option><option value="0.00015" selected>Padrão</option></select>
+            </div>
+        </div>
+        <div style="margin-top:15px; background:#f1f8e9; padding:10px; border-radius:8px; border:1px solid #c5e1a5;">
+            <label style="display:flex; align-items:center; gap:8px; margin:0; cursor:pointer; color:#2e7d32; font-weight:bold; font-size:13px;">
+                <input type="checkbox" id="kmlPontos" style="width:auto; margin:0; transform:scale(1.2);">📍 Incluir Pontos Check (3 a cada 100ha)
+            </label>
+        </div>
+        <button class="btn btn-blue" onclick="gerarKML()" style="width:100%; margin-top:20px;">📥 Processar KML</button>
+        <button onclick="fecharModais()" style="background:none; border:none; padding:15px; width:100%; font-weight:bold; color:#666;">Cancelar</button>
+    </div>
+</div>
+
+<div class="modal" id="modalImpedimento">
+    <div class="modal-content">
+        <h3>⚠️ Reportar Impedimento</h3>
+        <input type="text" id="impMotivoText" placeholder="Ex: Cana Alta, Estrada Ruim...">
+        <button class="btn btn-dark" style="background:#e65100; width:100%; margin-top:10px;" onclick="salvarImpedimento()">Confirmar Impedimento</button>
+        <button onclick="fecharModais()" style="width:100%; background:none; border:none; padding:15px; color:#666; font-weight:bold;">Voltar</button>
+    </div>
+</div>
+
+<div class="modal" id="modalImportar">
+    <div class="modal-content">
+        <h3 style="color:#1a73e8;">📥 Importar Planilhas</h3>
+        <label style="font-size:12px; font-weight:bold; color:#555;">1. Selecione a Unidade da Planilha:</label>
+        <select id="impUnidade" style="border: 2px solid #ccc; font-weight:bold; margin-bottom:15px;"><option value="IVI">IVI - IVINHEMA</option><option value="ANG">ANG - ANGÉLICA</option></select>
+        <label style="font-size:12px; font-weight:bold; color:#555;">2. Selecione o Tipo de Demanda:</label>
+        <select id="impTipo" style="border: 2px solid #1a73e8; font-weight:bold; margin-bottom:15px; color:#1a73e8;">
+            <option value="Cana Planta">🌱 Cana Planta</option>
+            <option value="Cana Soca">🌾 Cana Soca</option>
+            <option value="Pontos Check">📍 Pontos Check</option>
+            <option value="Remapeamento">🔄 Remapeamento (Linhas Não Aderentes)</option>
+        </select>
+        <label style="font-size:12px; font-weight:bold; color:#555;">3. Carregue o arquivo Excel (.xlsx):</label>
+        <input type="file" id="inputExcel" accept=".xlsx, .xls" multiple style="border: 2px dashed #34a853; background:#e8f5e9;">
+        <button class="btn btn-green" onclick="importarExcel()" style="width:100%; margin-top:15px; padding:15px; font-size:16px;">Sincronizar Demandas</button>
+        <button onclick="fecharModais()" style="width:100%; background:none; border:none; padding:15px; color:#666; font-weight:bold;">Cancelar</button>
+    </div>
+</div>
+
+<div class="modal" id="modalBanco">
+    <div class="modal-content">
+        <h3>🗺️ Memória de Mapas</h3>
+        <p style="font-size:13px; color:#444;">Piloto, carregue o arquivo .ZIP da usina aqui para poder gerar KMLs e usar as seleções manuais.</p>
+        <input type="file" id="inputZips" accept=".zip" multiple>
+        <button class="btn btn-dark" onclick="processarZips()" style="width:100%; margin-top:10px;">Salvar na Memória do Celular</button>
+        <p id="statusBanco" style="text-align:center; font-weight:bold; color:#1a73e8; margin-top:10px;"></p>
+        <button onclick="fecharModais()" style="width:100%; background:none; border:none; padding:15px; color:#666; font-weight:bold;">Fechar</button>
+    </div>
+</div>
+
+<script>
+    // Registra o Plugin de Rótulos no Chart.js
+    Chart.register(ChartDataLabels);
+
+    const URL_BANCO = "https://radar-topomap-default-rtdb.firebaseio.com/demandas_equipe";
+    let todasDemandas = [], bancoLocal = [], abaAtual = 'pendente', filtroAtual = 'Todas', unidadeAtual = 'IVI';
+    let setoresAtivos = []; 
+    let isGestor = false, idAtualAcao = null;
+
+    let modoManualAtual = 'cadastrada';
+    let mapManual = null; let geojsonLayerM = null; let featureLayersM = {}; let talhoesSelecionadosM = new Set();
+    let mapKml = null; let geojsonLayerKml = null; let featureLayersKml = {}; let talhoesSelecionadosKml = new Set();
+    let mapFin = null; let geojsonLayerFin = null; let featureLayersFin = {}; let talhoesSelecionadosFin = new Set();
+    let talhoesOriginaisDemanda = [];
+
+    let chartEvolucao = null;
+    let chartTipos = null;
+    let dadosAtuaisHistorico = []; 
+
+    // Cálculo de DAP
+    function calcularDAP(dataPlantioStr) {
+        if(!dataPlantioStr || dataPlantioStr === "ND") return 0;
+        let str = String(dataPlantioStr).trim();
+        let dataP;
+        if(!isNaN(str) && !str.includes('/')) {
+            let diasExcel = parseFloat(str);
+            dataP = new Date(Math.round((diasExcel - 25569) * 86400 * 1000));
+            dataP = new Date(dataP.getUTCFullYear(), dataP.getUTCMonth(), dataP.getUTCDate());
+        } 
+        else {
+            let partes = str.split(/[\/\-]/);
+            if(partes.length === 3) {
+                let ano = parseInt(partes[2]);
+                if (ano < 100) ano += 2000;
+                dataP = new Date(ano, parseInt(partes[1])-1, parseInt(partes[0]));
+            } else { return 0; }
+        }
+        let hoje = new Date(); hoje.setHours(0,0,0,0);
+        let diff = hoje.getTime() - dataP.getTime();
+        return Math.floor(diff / (1000 * 60 * 60 * 24));
+    }
+
+    const dbPromise = new Promise((resolve, reject) => {
+        let req = indexedDB.open("TopoMapDB", 1);
+        req.onupgradeneeded = e => { e.target.result.createObjectStore("mapas"); };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject("Erro ao abrir banco local.");
+    });
+
+    async function salvarNoCelular(dados) {
+        let db = await dbPromise; let tx = db.transaction("mapas", "readwrite");
+        tx.objectStore("mapas").put(dados, "meuMapaSHP");
+        return new Promise(resolve => tx.oncomplete = resolve);
+    }
+
+    async function lerDoCelular() {
+        let db = await dbPromise;
+        return new Promise(resolve => {
+            let req = db.transaction("mapas").objectStore("mapas").get("meuMapaSHP");
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    function ativarModoGestor() {
+        if(isGestor) { isGestor=false; document.getElementById('painelGestao').style.display='none'; document.getElementById('tituloApp').innerText='📋 Gestão de Demandas — toque para Modo Gestor'; renderizar(); return; }
+        if(prompt("Senha de gestor:") === "topo2026") { isGestor=true; document.getElementById('painelGestao').style.display='flex'; document.getElementById('tituloApp').innerText='👑 Modo Gestor Ativo — toque para sair'; renderizar(); }
+    }
+
+    function toggleSetor(num) {
+        const btn = document.getElementById('s' + num);
+        if(setoresAtivos.includes(num)) { setoresAtivos = setoresAtivos.filter(s => s !== num); btn.classList.remove('ativo'); } 
+        else { setoresAtivos.push(num); btn.classList.add('ativo'); }
+        renderizar();
+    }
+
+    async function zerarUnidadeAtual() {
+        let uNome = unidadeAtual === 'IVI' ? 'IVINHEMA' : 'ANGÉLICA';
+        if(confirm(`⚠️ TEM CERTEZA? Deseja apagar APENAS A FILA DE PENDENTES da unidade ${uNome}? \n\nO seu HISTÓRICO (Áreas Concluídas) está protegido e será mantido.`)) { 
+            if(prompt("Confirme a senha de Gestor:") === "topo2026") {
+                let listaApagar = todasDemandas.filter(d => d.unidade === unidadeAtual && d.status === 'pendente');
+                if(listaApagar.length === 0) return alert("A fila de pendentes já está vazia!");
+                // Backup de segurança automático antes de apagar
+                await fazerBackup(true);
+                document.getElementById('lista-demandas').innerHTML = `<p style="text-align:center; color:#e65100; font-weight:bold; margin-top:40px;">⏳ Apagando ${listaApagar.length} demandas pendentes... Aguarde.</p>`;
+                let promessas = listaApagar.map(d => fetch(`${URL_BANCO}/${d.id}.json`, {method:"DELETE"}));
+                await Promise.all(promessas);
+                alert(`✅ Fila limpa com sucesso! O seu histórico de concluídos não foi afetado.\n(Um backup de segurança foi baixado automaticamente antes.)`);
+                baixarBanco(); 
+            }
+        }
+    }
+
+    async function zerarSistemaTudo() {
+        if(!confirm("🚨 ATENÇÃO MÁXIMA!\n\nIsto vai APAGAR TUDO: fila, histórico e mapas de TODAS as usinas (IVI e ANG). NÃO TEM COMO DESFAZER.\n\nDeseja continuar?")) return;
+        // Backup de segurança OBRIGATÓRIO antes de apagar tudo
+        alert("Por segurança, vamos baixar um backup completo ANTES de apagar. Guarde o arquivo.");
+        let ok = await fazerBackup();
+        if(!ok && !confirm("Não foi possível gerar o backup. Deseja apagar mesmo assim? (NÃO recomendado)")) return;
+        // Dupla confirmação por digitação + senha
+        if(prompt('Para confirmar, digite APAGAR TUDO (em maiúsculas):') !== "APAGAR TUDO") return alert("Cancelado. Nada foi apagado.");
+        if(prompt("Confirme a senha de Gestor:") !== "topo2026") return alert("❌ Senha incorreta. Nada foi apagado.");
+        await fetch(URL_BANCO + ".json", {method:"DELETE"}); 
+        let db = await dbPromise; db.transaction("mapas", "readwrite").objectStore("mapas").delete("meuMapaSHP");
+        bancoLocal=[]; todasDemandas=[]; alert("Sistema resetado. (Você tem o backup que foi baixado, caso precise restaurar.)"); baixarBanco(); 
+    }
+
+    function abrirModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function fecharModais() { document.querySelectorAll('.modal').forEach(m => m.style.display='none'); }
+    function limparString(str) { return String(str||"").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+    function setUnidade(uni) { unidadeAtual = uni; document.getElementById('btnIVI').className = (uni==='IVI'?'uni-btn active':'uni-btn'); document.getElementById('btnANG').className = (uni==='ANG'?'uni-btn active':'uni-btn'); renderizar(); }
+
+    async function baixarBanco() {
+        try {
+            let res = await fetch(URL_BANCO + ".json?t=" + Date.now());
+            let dados = await res.json(); todasDemandas = [];
+            if(dados) for(let k in dados) { let item = dados[k]; item.id = k; todasDemandas.push(item); }
+            renderizar();
+        } catch(e) {}
+    }
+
+    // ============ BACKUP / RESTAURAÇÃO ============
+    // Baixa TODO o banco de demandas num arquivo .json (snapshot fiel, com as chaves do Firebase).
+    async function fazerBackup(silencioso = false) {
+        try {
+            let res = await fetch(URL_BANCO + ".json?t=" + Date.now());
+            let dados = await res.json();
+            if (!dados) { if(!silencioso) alert("Não há dados para backup."); return false; }
+            let qtd = Object.keys(dados).length;
+            let carga = { _tipo: "backup_demandas_topomap", _data: new Date().toISOString(), _qtd: qtd, dados: dados };
+            let blob = new Blob([JSON.stringify(carga, null, 2)], { type: "application/json" });
+            let nome = `Backup_Demandas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}_${new Date().toLocaleTimeString('pt-BR').replace(/:/g,'')}.json`;
+            saveAs(blob, nome);
+            if(!silencioso) alert(`✅ Backup salvo com ${qtd} demanda(s)!\nGuarde o arquivo "${nome}" em local seguro.`);
+            return true;
+        } catch(e) { if(!silencioso) alert("❌ Erro ao gerar backup. Verifique a internet."); return false; }
+    }
+
+    // Restaura um arquivo de backup para a nuvem. Usa PUT por ID -> restaurar 2x NÃO duplica.
+    async function restaurarBackup(event) {
+        let file = event.target.files[0]; if(!file) return;
+        event.target.value = "";
+        try {
+            let texto = await file.text();
+            let json = JSON.parse(texto);
+            let dados = json.dados || json; // aceita o formato com envelope ou o banco cru
+            let chaves = Object.keys(dados);
+            if (!chaves.length) return alert("O arquivo de backup está vazio ou inválido.");
+
+            let modo = prompt(
+                `Encontradas ${chaves.length} demanda(s) no backup.\n\n` +
+                `Digite:\n` +
+                `  MESCLAR  → adiciona/atualiza sem apagar o que já existe\n` +
+                `  SUBSTITUIR → apaga tudo na nuvem e restaura só o backup`,
+                "MESCLAR"
+            );
+            if (modo === null) return;
+            modo = modo.trim().toUpperCase();
+            if (modo !== "MESCLAR" && modo !== "SUBSTITUIR") return alert("Opção inválida. Nada foi alterado.");
+            if (prompt("Confirme a senha de Gestor:") !== "topo2026") return alert("❌ Senha incorreta.");
+
+            // Segurança: antes de mexer, baixa um backup do estado atual
+            await fazerBackup(true);
+
+            document.getElementById('lista-demandas').innerHTML =
+                `<p style="text-align:center; color:#5e35b1; font-weight:bold; margin-top:40px;">♻️ Restaurando ${chaves.length} demanda(s)... Aguarde.</p>`;
+
+            if (modo === "SUBSTITUIR") {
+                await fetch(URL_BANCO + ".json", { method: "DELETE" });
+            }
+            // PUT por ID mantém as mesmas chaves -> idempotente (não duplica)
+            let ops = chaves.map(k => {
+                let item = { ...dados[k] }; delete item.id;
+                return fetch(`${URL_BANCO}/${k}.json`, { method: "PUT", body: JSON.stringify(item) });
+            });
+            await Promise.all(ops);
+            alert(`✅ Backup restaurado com sucesso (${chaves.length} demanda(s))!`);
+            baixarBanco();
+        } catch(e) {
+            alert("❌ Não foi possível ler este arquivo. Ele é um backup válido (.json)?");
+            baixarBanco();
+        }
+    }
+
+    function renderizar() {
+        let demandasDaUnidade = todasDemandas.filter(d => d.unidade === unidadeAtual);
+        if(setoresAtivos.length > 0) demandasDaUnidade = demandasDaUnidade.filter(d => setoresAtivos.includes(parseInt(d.setor)));
+
+        let barra = document.getElementById('barraFiltros');
+        let tipos = new Set(demandasDaUnidade.map(d => d.tipo));
+        let htmlF = `<button class="btn-cat ${filtroAtual=='Todas'?'ativo':''}" onclick="filtroAtual='Todas';renderizar()">Todas</button>`;
+        Array.from(tipos).sort().forEach(t => { if(t) htmlF += `<button class="btn-cat ${filtroAtual==t?'ativo':''}" onclick="filtroAtual='${t}';renderizar()">${t}</button>`; });
+        barra.innerHTML = htmlF;
+
+        let div = document.getElementById('lista-demandas'); div.innerHTML = '';
+        let filtrados = demandasDaUnidade.filter(d => d.status === abaAtual);
+        if(filtroAtual !== 'Todas') filtrados = filtrados.filter(d => d.tipo === filtroAtual);
+
+        filtrados.sort((a, b) => {
+            let codA = parseInt(String(a.fazenda).split('-')[0].trim()) || 999999;
+            let codB = parseInt(String(b.fazenda).split('-')[0].trim()) || 999999;
+            if (codA !== codB) return codA - codB;
+            let glebaA = String(a.gleba || ""); let glebaB = String(b.gleba || "");
+            if (glebaA !== glebaB) return glebaA.localeCompare(glebaB, undefined, {numeric: true});
+            return (parseFloat(b.dias) || 0) - (parseFloat(a.dias) || 0);
+        });
+
+        let dashDiv = document.getElementById('statusDashboard');
+        let haTotal = filtrados.reduce((a, b) => a + (parseFloat(b.hectares)||0), 0);
+        
+        if(abaAtual === 'pendente' || abaAtual === 'andamento') {
+            dashDiv.innerHTML = `<div class="dash-pendente"><div class="dash-item"><span>${filtroAtual} ${abaAtual}</span><h3>${haTotal.toFixed(1)} ha</h3></div></div>`;
+            dadosAtuaisHistorico = []; 
+        } 
+        else if (abaAtual === 'concluido') {
+            dadosAtuaisHistorico = filtrados; 
+            let retrabalhosCount = filtrados.filter(d => d.retrabalho).length;
+            
+            let btnsExportacaoHTML = `
+                <div id="botoesExportacao" style="display:flex; gap:10px; margin-bottom:15px; justify-content: flex-end;">
+                    <button class="btn" style="background:#2e7d32; padding:8px 15px; min-width:auto; font-size:12px; border-radius:8px;" onclick="exportarExcelHistorico()">📊 EXCEL</button>
+                    <button class="btn" style="background:#c62828; padding:8px 15px; min-width:auto; font-size:12px; border-radius:8px;" onclick="exportarPDFHistorico()">📄 PDF</button>
+                </div>
+            `;
+
+            let dashHTML = `
+                ${btnsExportacaoHTML}
+                <div class="kpi-row">
+                    <div class="kpi-card" style="border-top-color:#34a853;">
+                        <span>Área Mapeada (ha)</span>
+                        <h3 style="color:#34a853;">${haTotal.toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}</h3>
+                    </div>
+                    <div class="kpi-card" style="border-top-color:#e53935;">
+                        <span>Retrabalhos</span>
+                        <h3 style="color:#e53935;">${retrabalhosCount}</h3>
+                    </div>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="chart-container">
+                        <div class="chart-title">Evolução Mensal (Ha)</div>
+                        <canvas id="chartEvolucaoMensal"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Distribuição por Serviço</div>
+                        <canvas id="chartTiposDemandas"></canvas>
+                    </div>
+                </div>
+            `;
+            dashDiv.innerHTML = dashHTML;
+            setTimeout(() => { desenharGraficosDash(filtrados); }, 150);
+        } else { dashDiv.innerHTML = ''; }
+
+        if(!filtrados.length) return div.innerHTML = `<p style="text-align:center;color:#999;margin-top:40px;">Lista vazia.</p>`;
+
+        filtrados.forEach(d => {
+            let bLix = isGestor ? `<button style="padding:12px;background:#fce8e6;color:#d32f2f;border:none;border-radius:8px;font-weight:bold;" onclick="exc('${d.id}')">🗑</button>` : '';
+            let bImp = (abaAtual == 'pendente' || abaAtual == 'andamento') ? `<button style="padding:12px;background:#fff3e0;color:#e65100;border:none;border-radius:8px;font-weight:bold;" onclick="abrirImpedimento('${d.id}')">⚠️ Impedimento</button>` : '';
+            let bIni = (abaAtual == 'pendente') ? `<button style="flex:1;padding:12px;background:#e3f2fd;color:#1565c0;border:none;border-radius:8px;font-weight:bold;" onclick="iniciarDemanda('${d.id}')">▶ Iniciar</button>` : '';
+            let bVolta = (abaAtual == 'andamento') ? `<button style="padding:12px;background:#eceff1;color:#455a64;border:none;border-radius:8px;font-weight:bold;" onclick="voltarParaFila('${d.id}')">↩ Voltar p/ Fila</button>` : '';
+            let bReabrir = (abaAtual == 'cancelado') ? `<button style="flex:1;padding:12px;background:#e3f2fd;color:#1565c0;border:none;border-radius:8px;font-weight:bold;" onclick="voltarParaFila('${d.id}')">↩ Reabrir p/ Fila</button>` : '';
+            let bFin = (abaAtual == 'andamento') ? `<button style="flex:1;padding:12px;background:#e8f5e9;color:#2e7d32;border:none;border-radius:8px;font-weight:bold;" onclick="prepararFinalizacao('${d.id}')">✅ Finalizar</button>` : '';
+            let bKML = ((abaAtual == 'andamento' || abaAtual == 'pendente') && !d.isAvulso) ? `<button style="flex:1;padding:12px;background:#e1bee7;color:#6a1b9a;border:none;border-radius:8px;font-weight:bold;" onclick="abrirKML('${d.id}')">📍 KML</button>` : '';
+
+            let boxBotoes = (bIni || bVolta || bReabrir || bFin || bKML || bImp || bLix) ? `<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">${bIni}${bReabrir}${bKML}${bFin}${bVolta}${bImp}${bLix}</div>` : '';
+            let badgeDias = (d.dias && parseFloat(d.dias) > 0) ? `<span style="background:#ffcdd2; color:#b71c1c; padding:2px 6px; border-radius:4px; font-size:10px; margin-right:5px; font-weight:bold;">🔥 ${d.dias} DIAS</span>` : '';
+            let displayGleba = d.gleba === "-" || d.gleba === "" ? "" : `(G${d.gleba})`;
+
+            let badgesTop = `<div style="position:absolute; top:15px; right:15px; display:flex; gap:5px; align-items:center;">
+                                ${d.retrabalho ? `<span style="background:#c62828; color:white; padding:4px 8px; border-radius:6px; font-weight:bold; font-size:10px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">🔄 RETRABALHO</span>` : ''}
+                                <span style="background:#e8f0fe; color:#1a73e8; padding:4px 8px; border-radius:6px; font-weight:bold; font-size:10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">${d.tipo}</span>
+                            </div>`;
+
+            let displayVariedades = d.variedade && d.variedade !== "ND" ? 
+                `<div style="background:#f1f8e9; padding:8px; border-radius:6px; margin-bottom:5px; border:1px solid #c5e1a5; font-size:12px; line-height:1.4;">
+                    <b style="color:#2e7d32; display:block; margin-bottom:4px;">Distribuição de Variedades:</b>
+                    ${d.variedade}
+                </div>` : 
+                `<p style="margin-top:5px; margin-bottom:5px;"><b>Variedade:</b> Não Informada</p>`;
+
+            div.innerHTML += `<div class="cartao">
+                ${badgesTop}
+                <h4><span style="background:#455a64; color:white; padding:2px 6px; border-radius:4px; font-size:10px; margin-right:5px;">SETOR ${d.setor || '-'}</span>${badgeDias}📍 ${d.fazenda} ${displayGleba}</h4>
+                <p style="margin-top:5px; margin-bottom:2px;"><b>Tipo de Plantio:</b> ${d.tipoPlantio || 'Não Informado'}</p>
+                ${displayVariedades}
+                <p style="color:#d32f2f; margin-top:0;"><b>Idade Atual (DAP):</b> ${d.diasCalculados || 0} dias</p>
+                <p style="margin-bottom:0;"><b>Área Total:</b> ${d.hectares} ha</p>
+                ${d.operador ? `<p style="margin-top:5px; margin-bottom:0; font-size:12px; color:#1b5e20;"><b>👷 Operador:</b> ${d.operador}</p>` : ''}
+                ${abaAtual === 'concluido' ? `<p style="margin-top:2px; font-size:11px; color:#888;">Data Conclusão: ${d.data}</p>` : ''}
+                ${boxBotoes}
+            </div>`;
+        });
+    }
+
+    function exportarExcelHistorico() {
+        if(!dadosAtuaisHistorico || dadosAtuaisHistorico.length === 0) return alert("Não há dados para exportar.");
+        let exportData = dadosAtuaisHistorico.map(d => ({ 
+            "Unidade": d.unidade === 'IVI' ? 'Ivinhema' : 'Angélica', 
+            "Fazenda": d.fazenda, 
+            "Gleba": d.gleba, 
+            "Setor": d.setor, 
+            "Talhões Específicos": d.talhoes, 
+            "Área Mapeada (ha)": parseFloat(d.hectares) || 0, 
+            "Variedade": (d.variedade || "ND").replace(/<br>/g, '  |  '), // Limpa o HTML para o Excel
+            "Tipo de Plantio": d.tipoPlantio || "ND",
+            "DAP": d.diasCalculados || 0,
+            "Tipo de Serviço": d.tipo, 
+            "Operador": d.operador || "-", 
+            "Data Conclusão": d.data || "-", 
+            "Retrabalho": d.retrabalho ? "SIM" : "NÃO" 
+        }));
+        let ws = XLSX.utils.json_to_sheet(exportData); let wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Historico");
+        XLSX.writeFile(wb, `Relatorio_Demandas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
+    }
+
+    function exportarPDFHistorico() {
+        let elemento = document.getElementById('areaExportarPDF'); if(!elemento) return;
+        document.getElementById('botoesExportacao').style.display = 'none'; document.body.classList.add('printing-dash');
+        let opt = { margin: [10, 10, 10, 10], filename: `Dashboard_Historico_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, windowWidth: 800 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+        html2pdf().set(opt).from(elemento).save().then(() => { document.getElementById('botoesExportacao').style.display = 'flex'; document.body.classList.remove('printing-dash'); });
+    }
+
+    function desenharGraficosDash(dadosConcluidos) {
+        if(chartEvolucao) chartEvolucao.destroy();
+        if(chartTipos) chartTipos.destroy();
+
+        const nomeMeses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        let mapMeses = {};
+        let mapTipos = {};
+
+        dadosConcluidos.forEach(d => {
+            let ha = parseFloat(d.hectares) || 0;
+            let t = d.tipo || "Outros";
+            if(!mapTipos[t]) mapTipos[t] = 0; mapTipos[t] += ha;
+
+            if(d.data) {
+                let p = d.data.split('/');
+                if(p.length === 3) {
+                    let key = `${p[2]}-${p[1]}`; 
+                    let label = `${nomeMeses[parseInt(p[1])-1]}/${p[2].substring(2)}`;
+                    if(!mapMeses[key]) mapMeses[key] = { label: label, ha: 0 }; mapMeses[key].ha += ha;
+                }
+            }
+        });
+
+        let chavesOrdenadas = Object.keys(mapMeses).sort();
+        let labelsEvolucao = chavesOrdenadas.map(k => mapMeses[k].label);
+        let dadosEvolucao = chavesOrdenadas.map(k => mapMeses[k].ha.toFixed(1));
+
+        const ctxEvolucao = document.getElementById('chartEvolucaoMensal').getContext('2d');
+        chartEvolucao = new Chart(ctxEvolucao, {
+            type: 'bar', 
+            data: { labels: labelsEvolucao, datasets: [{ label: 'Área Mapeada (ha)', data: dadosEvolucao, backgroundColor: 'rgba(52, 168, 83, 0.8)', borderColor: '#1b5e20', borderWidth: 1, borderRadius: 4 }] },
+            options: { 
+                responsive: true, maintainAspectRatio: false, layout: { padding: { top: 25 } }, 
+                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'top', color: '#1b5e20', font: { weight: 'bold', size: 11 }, formatter: function(value) { return parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1}); } } }, 
+                scales: { y: { beginAtZero: true } }, animation: false 
+            } 
+        });
+
+        let chavesTipos = Object.keys(mapTipos); 
+        let labelsTiposComValor = chavesTipos.map(k => `${k} (${mapTipos[k].toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})} ha)`);
+        let dadosTipos = chavesTipos.map(k => mapTipos[k].toFixed(1));
+
+        const ctxTipos = document.getElementById('chartTiposDemandas').getContext('2d');
+        chartTipos = new Chart(ctxTipos, {
+            type: 'doughnut', 
+            data: { labels: labelsTiposComValor, datasets: [{ data: dadosTipos, backgroundColor: ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#8e24aa', '#00acc1', '#ff9800', '#795548', '#9e9e9e'], borderWidth: 2, borderColor: '#ffffff' }] },
+            options: { 
+                responsive: true, maintainAspectRatio: false, cutout: '60%', 
+                plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, datalabels: { display: false } }, 
+                animation: false 
+            }
+        });
+    }
+
+    async function iniciarDemanda(id) {
+        let ultimoNome = localStorage.getItem('nome_topografo') || ""; let nome = prompt("👷 Quem vai executar esta demanda?", ultimoNome);
+        if (nome === null) return; if (nome.trim() !== "") { localStorage.setItem('nome_topografo', nome.trim()); }
+        await alt(id, 'andamento', { operador: nome || "Não informado" });
+    }
+
+    // Devolve uma demanda para a Fila (corrige "Iniciar" sem querer, ou reabre um cancelado)
+    async function voltarParaFila(id) {
+        let d = todasDemandas.find(x => x.id === id);
+        let desc = d ? `${d.fazenda}${d.gleba && d.gleba !== '-' ? ' (G'+d.gleba+')' : ''}` : 'esta demanda';
+        if(!confirm(`Devolver ${desc} para a Fila (Pendentes)?`)) return;
+        // Limpa marcas de execução/cancelamento ao voltar para pendente
+        await fetch(`${URL_BANCO}/${id}.json`, { method: "PATCH", body: JSON.stringify({ status: 'pendente', operador: "", motivo: "", data_cancelamento: "" }) });
+        baixarBanco();
+    }
+
+    // =========================================================
+    // NOVO MOTOR DE IMPORTAÇÃO (AGRUPA VARIEDADES CORRETAMENTE)
+    // =========================================================
+    async function importarExcel() {
+        const files = document.getElementById('inputExcel').files; if(!files.length) return alert("Selecione um arquivo .xlsx primeiro!");
+        const uSelecionada = document.getElementById('impUnidade').value, tSelecionado = document.getElementById('impTipo').value;
+        let isRetrabalho = tSelecionado === 'Remapeamento'; const btn = document.querySelector('#modalImportar .btn-green'); 
+        btn.innerText = "Lendo e Processando..."; btn.disabled = true;
+
+        let jahExiste = new Set(); todasDemandas.forEach(d => { String(d.talhoes).split(',').forEach(t => jahExiste.add(`${d.unidade}|${d.fazenda}|${d.gleba}|${d.tipo}|${t.trim()}`)); });
+
+        try {
+            let grp = {};
+            for (let file of files) {
+                const data = await file.arrayBuffer(); const workbook = XLSX.read(data, {type:'array'});
+                workbook.SheetNames.forEach(sheetName => {
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                    rows.forEach(r => {
+                        let k = Object.keys(r); function acharCol(sin) { return k.find(c => sin.some(s => limparString(c).includes(s))); }
+                        let codFaz = String(r[acharCol(["FAZENDA", "CODIGO"])] || "").trim(), nomeFaz = String(r[acharCol(["PROPRIEDADE", "NOME"])] || "").trim();
+                        let displayFazenda = nomeFaz ? `${codFaz} - ${nomeFaz}` : codFaz, g = String(r[acharCol(["GLEBA"])] || "").trim(), t = String(r[acharCol(["TALHAO", "TALHÃO"])] || "").trim();
+                        let colArea = acharCol(["ÁREA_PLANTADA", "AREA_PLANTADA", "ÁREA_COLHIDA", "AREA_COLHIDA", "AREA", "ÁREA", "HECTARE"]); let areaReal = parseFloat(String(r[colArea] || "0").replace(',', '.')) || 0;
+                        let s = r[acharCol(["SETOR"])] || "-", colDias = acharCol(["DIAS_APÓS_PLANTIO", "DIAS_APOS_PLANTIO", "DIAS_APÓS_COLHEITA", "DIAS_APOS_COLHEITA", "DIAS_APÓS", "DIAS_APOS", "DIAS"]);
+                        let diasRaw = parseFloat(String(r[colDias] || "0").replace(',', '.')) || 0;
+                        
+                        let dPlantio = String(r[acharCol(["DATA_PLANTIO", "DATA"])] || "").trim();
+                        let varPlantio = String(r[acharCol(["VARIEDADE"])] || "ND").trim();
+                        let tipoPlantioStr = String(r[acharCol(["TIPO_PLANTIO", "TIPO"])] || "ND").trim();
+
+                        if(codFaz && !jahExiste.has(`${uSelecionada}|${displayFazenda}|${g}|${tSelecionado}|${t}`)) {
+                            let id = `${uSelecionada}|${displayFazenda}|${g}|${tSelecionado}`;
+                            if(!grp[id]) { 
+                                grp[id] = { 
+                                    u: uSelecionada, s: s, f: displayFazenda, g: g, tals: new Set(), areaMap: {}, 
+                                    tipo: tSelecionado, somaDias: 0, qtdDias: 0,
+                                    dataPlantio: dPlantio, tipoPlantio: tipoPlantioStr, diasCalculados: calcularDAP(dPlantio),
+                                    mapVariedades: {} // <-- MAPA PARA GUARDAR AS VARIEDADES DESTE GRUPO
+                                }; 
+                            }
+                            if(t !== "-" && t !== "") { 
+                                grp[id].tals.add(t); 
+                                if(!grp[id].areaMap[t]) grp[id].areaMap[t] = areaReal; 
+                                grp[id].somaDias += diasRaw; 
+                                grp[id].qtdDias++; 
+                                
+                                // SALVA A VARIEDADE ESPECÍFICA DESTE TALHÃO
+                                if(!grp[id].mapVariedades[varPlantio]) grp[id].mapVariedades[varPlantio] = [];
+                                if(!grp[id].mapVariedades[varPlantio].includes(t)) grp[id].mapVariedades[varPlantio].push(t);
+                            }
+                        }
+                    });
+                });
+            }
+            
+            for(let key in grp) {
+                let x = grp[key]; 
+                let somaFinal = Object.values(x.areaMap).reduce((a, b) => a + b, 0); 
+                let mediaDias = x.qtdDias > 0 ? Math.round(x.somaDias / x.qtdDias) : 0;
+                
+                // GERA A STRING FINAL FORMATADA COM AS VARIEDADES DO GRUPO
+                let arrayVarHTML = [];
+                for (let varNome in x.mapVariedades) {
+                    let listaTalhoes = x.mapVariedades[varNome].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).join(", ");
+                    let nomeExibicao = (varNome.trim() === "" || varNome === "undefined" || varNome === "ND") ? "Não Informada" : varNome;
+                    arrayVarHTML.push(`• Talhões ${listaTalhoes} ➔ ${nomeExibicao}`);
+                }
+                let stringVariedadesFinal = arrayVarHTML.join("<br>");
+
+                await fetch(URL_BANCO+".json", { method:"POST", body:JSON.stringify({ 
+                    unidade: x.u, setor: x.s, fazenda: x.f, gleba: x.g, talhoes: Array.from(x.tals).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).join(", "), hectares: somaFinal.toFixed(2), 
+                    dias: mediaDias, status: 'pendente', tipo: x.tipo, isAvulso: false, retrabalho: isRetrabalho, data: new Date().toLocaleDateString(),
+                    dataPlantio: x.dataPlantio, variedade: stringVariedadesFinal, tipoPlantio: x.tipoPlantio, diasCalculados: x.diasCalculados
+                }) });
+            }
+            alert("✅ Planilha importada e sincronizada com sucesso!"); fecharModais(); baixarBanco();
+        } catch(e) { alert("⚠️ Erro na importação."); console.error(e); }
+        btn.innerText = "Sincronizar Demandas"; btn.disabled = false; document.getElementById('inputExcel').value = ""; 
+    }
+
+    async function alt(id, s, extra = {}) { await fetch(`${URL_BANCO}/${id}.json`, {method:"PATCH", body:JSON.stringify({status:s, ...extra, data:new Date().toLocaleDateString()})}); baixarBanco(); }
+    async function exc(id) {
+        let d = todasDemandas.find(x => x.id === id);
+        let desc = d ? `${d.fazenda}${d.gleba && d.gleba!=='-' ? ' (G'+d.gleba+')' : ''}` : 'esta demanda';
+        if(!confirm(`Apagar ${desc}?\nEsta ação não pode ser desfeita.`)) return;
+        await fetch(`${URL_BANCO}/${id}.json`, {method:"DELETE"});
+        baixarBanco();
+    }
+    function abrirImpedimento(id) { idAtualAcao = id; document.getElementById('impMotivoText').value = ''; abrirModal('modalImpedimento'); }
+    async function salvarImpedimento() { let m = document.getElementById('impMotivoText').value; if(!m) return alert("Digite o motivo!"); await fetch(`${URL_BANCO}/${idAtualAcao}.json`, { method: "PATCH", body: JSON.stringify({ status: 'cancelado', motivo: m, data_cancelamento: new Date().toLocaleDateString() }) }); fecharModais(); baixarBanco(); }
+    function mudarTab(t) { abaAtual=t; document.querySelectorAll('.aba-btn').forEach(b=>b.classList.remove('aba-ativa')); document.getElementById(t=='pendente'?'tabP':t=='andamento'?'tabA':t=='cancelado'?'tabX':'tabC').classList.add('aba-ativa'); renderizar(); }
+
+    function prepararFinalizacao(id) {
+        let d = todasDemandas.find(x => x.id === id); if(!d) return; idAtualAcao = id;
+        document.getElementById('fInfo').innerText = `📍 ${d.fazenda} ${d.gleba !== "-" ? "(G"+d.gleba+")" : ""}`;
+        if (d.isAvulso) { document.getElementById('blocoFinalizarCadastrada').style.display = 'none'; document.getElementById('blocoFinalizarAvulso').style.display = 'block'; document.getElementById('fAreaAvulsa').value = d.hectares;
+        } else {
+            document.getElementById('blocoFinalizarCadastrada').style.display = 'block'; document.getElementById('blocoFinalizarAvulso').style.display = 'none';
+            talhoesOriginaisDemanda = (d.talhoes || "").split(',').map(x=>x.trim()).filter(x=>x); talhoesSelecionadosFin = new Set(talhoesOriginaisDemanda);
+            let codFazendaDemanda = String(d.fazenda).split(' - ')[0].trim(); let talhoesGleba = bancoLocal.filter(b => String(b.cod) === codFazendaDemanda && String(b.gleba) === String(d.gleba));
+            let box = document.getElementById('boxTalhoesFin'); box.innerHTML = ''; document.getElementById('lblCheckTodosFin').style.display = 'none'; document.getElementById('mapaFinalizar').style.display = 'none'; document.getElementById('boxMotivoFalta').style.display = 'none'; document.getElementById('fMotivo').value = '';
+
+            if(talhoesGleba.length > 0) {
+                let mapHectares = {}; talhoesGleba.forEach(t => mapHectares[t.talhao] = t.ha);
+                let talsUnicos = Object.keys(mapHectares).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+                talsUnicos.forEach(t => { let btn = document.createElement('div'); btn.className = 'btn-talhao'; if(talhoesSelecionadosFin.has(t)) btn.classList.add('selecionado'); btn.id = 'btnF-t-' + t; btn.innerText = t; btn.dataset.ha = mapHectares[t]; btn.onclick = () => toggleTalhaoFin(t); box.appendChild(btn); });
+
+                document.getElementById('lblCheckTodosFin').style.display = 'flex'; document.getElementById('checkTodosFin').checked = false; document.getElementById('mapaFinalizar').style.display = 'block';
+                if (!mapFin) { mapFin = L.map('mapaFinalizar'); L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(mapFin); }
+                if (geojsonLayerFin) mapFin.removeLayer(geojsonLayerFin); featureLayersFin = {};
+
+                geojsonLayerFin = L.geoJSON(talhoesGleba.map(t => ({ type: "Feature", properties: { TALHAO: t.talhao, HA: t.ha }, geometry: t.geom })), {
+                    style: function(f) { let t = String(f.properties.TALHAO); if(talhoesSelecionadosFin.has(t)) return { color: '#105e2d', weight: 2, fillColor: '#25D366', fillOpacity: 0.7 }; return { color: '#25D366', weight: 2, fillColor: '#f1f8e9', fillOpacity: 0.4 }; },
+                    onEachFeature: function (f, layer) { let t = String(f.properties.TALHAO); featureLayersFin[t] = layer; layer.bindTooltip(t, { permanent: true, direction: 'center', className: 'label-talhao' }); layer.on('click', () => toggleTalhaoFin(t)); }
+                }).addTo(mapFin);
+                calcAreaFin(); setTimeout(() => { mapFin.invalidateSize(); mapFin.fitBounds(geojsonLayerFin.getBounds()); }, 300);
+            } else { box.innerHTML = '<p style="grid-column: span 5; text-align: center; color: #d32f2f; font-weight:bold;">⚠️ Mapa da usina não carregado ou área sem desenho.</p>'; document.getElementById('txtAreaFinalCalc').innerText = d.hectares + " ha"; }
+        }
+        abrirModal('modalFinalizar');
+    }
+
+    function toggleTalhaoFin(t) {
+        if(document.getElementById('checkTodosFin').checked) return;
+        let btn = document.getElementById('btnF-t-' + t), layer = featureLayersFin[t];
+        if(talhoesSelecionadosFin.has(t)) { talhoesSelecionadosFin.delete(t); if(btn) btn.classList.remove('selecionado'); if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); } 
+        else { talhoesSelecionadosFin.add(t); if(btn) btn.classList.add('selecionado'); if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); }
+        calcAreaFin();
+    }
+
+    function toggleTodosTalhoesFin() {
+        let isTodos = document.getElementById('checkTodosFin').checked; talhoesSelecionadosFin.clear();
+        document.querySelectorAll('#boxTalhoesFin .btn-talhao').forEach(b => {
+            let t = b.innerText, layer = featureLayersFin[t];
+            if(isTodos) { talhoesSelecionadosFin.add(t); b.classList.add('selecionado'); b.style.opacity='0.6'; b.style.cursor='not-allowed'; if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); } 
+            else { b.classList.remove('selecionado'); b.style.opacity='1'; b.style.cursor='pointer'; if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); }
+        }); calcAreaFin();
+    }
+
+    function calcAreaFin() { let tot = 0; document.querySelectorAll('#boxTalhoesFin .btn-talhao.selecionado').forEach(b => tot += parseFloat(b.dataset.ha || 0)); document.getElementById('txtAreaFinalCalc').innerText = (tot > 0 ? tot.toFixed(2) : "0.00") + " ha"; let faltouAlgum = talhoesOriginaisDemanda.some(t => !talhoesSelecionadosFin.has(t)); document.getElementById('boxMotivoFalta').style.display = faltouAlgum ? 'block' : 'none'; }
+
+    async function confirmarFinalizacao() {
+        let d = todasDemandas.find(x => x.id === idAtualAcao);
+        if (d.isAvulso) { let areaFinalFeita = document.getElementById('fAreaAvulsa').value; if(!areaFinalFeita || areaFinalFeita <= 0) return alert("Informe a área total!"); await alt(idAtualAcao, 'concluido', {hectares: areaFinalFeita});
+        } else {
+            let feitos = Array.from(talhoesSelecionadosFin).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})); let menos = talhoesOriginaisDemanda.filter(x => !feitos.includes(x)); let mot = document.getElementById('fMotivo').value;
+            if(menos.length > 0 && !mot) return alert("Motivo obrigatório para áreas não feitas!"); if(feitos.length === 0) return alert("Selecione ao menos um talhão ou relate Impedimento.");
+            let areaAtualizada = document.getElementById('txtAreaFinalCalc').innerText.replace(' ha', '');
+            await alt(idAtualAcao, 'concluido', {talhoes: feitos.join(", "), hectares: areaAtualizada});
+            if(menos.length > 0) { await fetch(URL_BANCO + ".json", {method:"POST", body:JSON.stringify({unidade:d.unidade, setor:d.setor, fazenda:d.fazenda, gleba:d.gleba, talhoes:menos.join(", "), hectares:0, status:'cancelado', tipo:d.tipo, motivo:mot, data_cancelamento:new Date().toLocaleDateString(), isAvulso: false})}); }
+        }
+        fecharModais(); baixarBanco();
+    }
+
+    function abrirDemandaManual() {
+        if(bancoLocal.length === 0) alert("Dica: Carregue o mapa da usina (.ZIP) na tela inicial!");
+        let selF = document.getElementById('selFazendaM'); selF.innerHTML = '<option value="">Selecione...</option>';
+        if(bancoLocal.length > 0) { let codigos = [...new Set(bancoLocal.map(d => d.cod))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true})); codigos.forEach(cod => selF.innerHTML += `<option value="${cod}">${cod}</option>`); }
+        if(document.getElementById('mRetrabalho')) document.getElementById('mRetrabalho').checked = false;
+        alternarModoManual('cadastrada'); abrirModal('modalNova');
+    }
+
+    function alternarModoManual(modo) {
+        modoManualAtual = modo;
+        if(modo === 'cadastrada') {
+            document.getElementById('btnModoCadastrada').classList.add('ativo'); document.getElementById('btnModoAvulso').classList.remove('ativo');
+            document.getElementById('formCadastrada').style.display = 'block'; document.getElementById('formAvulso').style.display = 'none';
+            document.getElementById('mAreaManual').readOnly = true; document.getElementById('mAreaManual').placeholder = "Área Automática"; document.getElementById('txtAreaAviso').style.display = "none";
+            if(mapManual) setTimeout(() => { mapManual.invalidateSize(); }, 300);
+        } else {
+            document.getElementById('btnModoCadastrada').classList.remove('ativo'); document.getElementById('btnModoAvulso').classList.add('ativo');
+            document.getElementById('formCadastrada').style.display = 'none'; document.getElementById('formAvulso').style.display = 'block';
+            document.getElementById('mAreaManual').readOnly = false; document.getElementById('mAreaManual').placeholder = "0.00 ha"; document.getElementById('mAreaManual').value = ""; document.getElementById('txtAreaAviso').style.display = "block";
+        }
+    }
+
+    function atualizarFazendaM() {
+        let cod = document.getElementById('selFazendaM').value; if(!cod) return;
+        let info = bancoLocal.find(d => d.cod === cod); document.getElementById('mNomeFaz').value = info ? info.nome : "";
+        let glebas = [...new Set(bancoLocal.filter(d => d.cod === cod).map(d => d.gleba))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        let selG = document.getElementById('selGlebaM'); selG.innerHTML = '<option value="">Selecione a Gleba...</option>'; glebas.forEach(g => selG.innerHTML += `<option value="${g}">Gleba ${g}</option>`);
+        selG.disabled = false; document.getElementById('boxTalhoesM').innerHTML = '<div style="grid-column: span 5; text-align: center; color: #888;">Selecione a Gleba</div>';
+        document.getElementById('mapaManual').style.display = 'none'; document.getElementById('lblCheckTodosM').style.display = 'none'; talhoesSelecionadosM.clear(); calcAreaM();
+    }
+
+    function atualizarGlebaM() {
+        let cod = document.getElementById('selFazendaM').value, gleba = document.getElementById('selGlebaM').value; if(!gleba) return;
+        let talhoesGleba = bancoLocal.filter(d => d.cod === cod && d.gleba === gleba);
+        if(talhoesGleba.length > 0 && talhoesGleba[0].setor) { let s = talhoesGleba[0].setor.replace(/\D/g, ''); if(s) document.getElementById('mSetor').value = s; }
+
+        let mapHectares = {}; talhoesGleba.forEach(t => mapHectares[t.talhao] = t.ha);
+        let talsUnicos = Object.keys(mapHectares).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        let box = document.getElementById('boxTalhoesM'); box.innerHTML = ''; talhoesSelecionadosM.clear();
+        talsUnicos.forEach(t => { let btn = document.createElement('div'); btn.className = 'btn-talhao'; btn.id = 'btnM-t-' + t; btn.innerText = t; btn.dataset.ha = mapHectares[t]; btn.onclick = () => toggleTalhaoM(t); box.appendChild(btn); });
+        
+        document.getElementById('lblCheckTodosM').style.display = 'flex'; document.getElementById('checkTodosM').checked = false; document.getElementById('mapaManual').style.display = 'block';
+        if (!mapManual) { mapManual = L.map('mapaManual'); L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(mapManual); }
+        if (geojsonLayerM) mapManual.removeLayer(geojsonLayerM); featureLayersM = {};
+
+        geojsonLayerM = L.geoJSON(talhoesGleba.map(t => ({ type: "Feature", properties: { TALHAO: t.talhao, HA: t.ha }, geometry: t.geom })), {
+            style: { color: '#25D366', weight: 2, fillColor: '#f1f8e9', fillOpacity: 0.4 },
+            onEachFeature: function (f, layer) { let t = String(f.properties.TALHAO); featureLayersM[t] = layer; layer.bindTooltip(t, { permanent: true, direction: 'center', className: 'label-talhao' }); layer.on('click', () => toggleTalhaoM(t)); }
+        }).addTo(mapManual);
+        
+        setTimeout(() => { mapManual.invalidateSize(); mapManual.fitBounds(geojsonLayerM.getBounds()); }, 300); calcAreaM();
+    }
+
+    function toggleTalhaoM(t) {
+        if(document.getElementById('checkTodosM').checked) return;
+        let btn = document.getElementById('btnM-t-' + t), layer = featureLayersM[t];
+        if(talhoesSelecionadosM.has(t)) { talhoesSelecionadosM.delete(t); if(btn) btn.classList.remove('selecionado'); if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); } 
+        else { talhoesSelecionadosM.add(t); if(btn) btn.classList.add('selecionado'); if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); } calcAreaM();
+    }
+
+    function toggleTodosTalhoesM() {
+        let isTodos = document.getElementById('checkTodosM').checked; talhoesSelecionadosM.clear();
+        document.querySelectorAll('#boxTalhoesM .btn-talhao').forEach(b => {
+            let t = b.innerText, layer = featureLayersM[t];
+            if(isTodos) { talhoesSelecionadosM.add(t); b.classList.add('selecionado'); b.style.opacity='0.6'; b.style.cursor='not-allowed'; if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); } 
+            else { b.classList.remove('selecionado'); b.style.opacity='1'; b.style.cursor='pointer'; if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); }
+        }); calcAreaM();
+    }
+
+    function calcAreaM() { let tot = 0; document.querySelectorAll('#boxTalhoesM .btn-talhao.selecionado').forEach(b => tot += parseFloat(b.dataset.ha || 0)); document.getElementById('mAreaManual').value = tot > 0 ? tot.toFixed(2) : ""; }
+
+    async function salvarDemandaManual() {
+        let u = document.getElementById('mUni').value, s = document.getElementById('mSetor').value, dM = parseInt(document.getElementById('mDiasManual').value) || 0, tP = document.getElementById('mTipo').value, areaF = document.getElementById('mAreaManual').value || "0.00";
+        let fFinal, gFinal, talsFinal; let isAvulso = (modoManualAtual === 'avulso'); let retrab = document.getElementById('mRetrabalho') ? document.getElementById('mRetrabalho').checked : false;
+
+        if(!isAvulso) {
+            let cod = document.getElementById('selFazendaM').value, nome = document.getElementById('mNomeFaz').value;
+            if(!cod) return alert("Selecione a Fazenda!"); fFinal = nome ? `${cod} - ${nome}` : cod; gFinal = document.getElementById('selGlebaM').value || "-"; talsFinal = Array.from(talhoesSelecionadosM).join(", ");
+            if(!talsFinal) return alert("Selecione ao menos um talhão no mapa!");
+        } else { fFinal = document.getElementById('mFazAvulso').value; talsFinal = document.getElementById('mDescAvulso').value || "-"; gFinal = "-"; if(!fFinal) return alert("Digite o nome da Área Avulsa!"); }
+
+        await fetch(URL_BANCO + ".json", {method:"POST", body:JSON.stringify({ unidade: u, setor: s, fazenda: fFinal, gleba: gFinal, talhoes: talsFinal, hectares: areaF, dias: dM, status: 'pendente', tipo: tP, isAvulso: isAvulso, retrabalho: retrab, data: new Date().toLocaleDateString() })});
+        fecharModais(); baixarBanco();
+    }
+
+    async function processarZips() {
+        const files = document.getElementById('inputZips').files; if(!files.length) return;
+        let novo = []; document.getElementById('statusBanco').innerText = "⏳ Lendo e salvando mapas, aguarde...";
+        try {
+            for(let f of files) {
+                let geo = await shp(await f.arrayBuffer()); if(Array.isArray(geo)) geo=geo[0];
+                geo.features.forEach(feat => {
+                    let p={}; for(let k in feat.properties) p[k.toUpperCase()]=feat.properties[k];
+                    let codFaz = String(p.FAZENDA||p.CODIGO||"").trim(); let nomeFaz = String(p.PROPRIEDAD||p.NOME||"").trim();
+                    let valArea = p.HECTARE || p.AREA || p.HA || p.AREA_HA || 0; let calcRealHa = parseFloat(String(valArea).replace(',', '.')) || 0;
+                    if(calcRealHa > 1000) calcRealHa = calcRealHa / 10000;
+                    if(codFaz) novo.push({ cod: codFaz, faz: nomeFaz ? `${codFaz} - ${nomeFaz}` : codFaz, nome: nomeFaz, gleba: String(p.GLEBA||"").trim(), talhao: String(p.TALHAO||"").trim(), setor: String(p.SETOR||"").trim(), ha: calcRealHa, geom: feat.geometry });
+                });
+            }
+            bancoLocal = novo; await salvarNoCelular(novo); document.getElementById('statusBanco').innerText = "✅ Mapas Salvos!";
+        } catch(e) { document.getElementById('statusBanco').innerText = "❌ Erro ao ler SHP."; }
+    }
+
+    function abrirKML(id) { 
+        idAtualAcao = id; let d = todasDemandas.find(x => x.id === id); if(!d) return;
+        document.getElementById('kmlInfo').innerText = `📍 ${d.fazenda} (G${d.gleba})`; 
+        let talsArray = (d.talhoes || "").split(',').map(x=>x.trim()).filter(x=>x); talhoesSelecionadosKml = new Set(talsArray);
+        let codFazendaDemanda = String(d.fazenda).split(' - ')[0].trim(); let talhoesGleba = bancoLocal.filter(b => String(b.cod) === codFazendaDemanda && String(b.gleba) === String(d.gleba));
+        let box = document.getElementById('boxTalhoesKml'); box.innerHTML = '';
+        document.getElementById('lblCheckTodosKml').style.display = 'none'; document.getElementById('mapaKml').style.display = 'none';
+
+        if(talhoesGleba.length > 0) {
+            let mapHectares = {}; talhoesGleba.forEach(t => mapHectares[t.talhao] = t.ha);
+            let talsUnicos = Object.keys(mapHectares).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            talsUnicos.forEach(t => { let btn = document.createElement('div'); btn.className = 'btn-talhao'; if(talhoesSelecionadosKml.has(t)) btn.classList.add('selecionado'); btn.id = 'btnK-t-' + t; btn.innerText = t; btn.dataset.ha = mapHectares[t]; btn.onclick = () => toggleTalhaoKml(t); box.appendChild(btn); });
+            document.getElementById('lblCheckTodosKml').style.display = 'flex'; document.getElementById('checkTodosKml').checked = false; document.getElementById('mapaKml').style.display = 'block';
+
+            if (!mapKml) { mapKml = L.map('mapaKml'); L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(mapKml); }
+            if (geojsonLayerKml) mapKml.removeLayer(geojsonLayerKml); featureLayersKml = {};
+
+            geojsonLayerKml = L.geoJSON(talhoesGleba.map(t => ({ type: "Feature", properties: { TALHAO: t.talhao, HA: t.ha }, geometry: t.geom })), {
+                style: function(f) { let t = String(f.properties.TALHAO); if(talhoesSelecionadosKml.has(t)) return { color: '#105e2d', weight: 2, fillColor: '#25D366', fillOpacity: 0.7 }; return { color: '#25D366', weight: 2, fillColor: '#f1f8e9', fillOpacity: 0.4 }; },
+                onEachFeature: function (f, layer) { let t = String(f.properties.TALHAO); featureLayersKml[t] = layer; layer.bindTooltip(t, { permanent: true, direction: 'center', className: 'label-talhao' }); layer.on('click', () => toggleTalhaoKml(t)); }
+            }).addTo(mapKml);
+        } else { box.innerHTML = '<p style="grid-column: span 5; text-align: center; color: #d32f2f; font-weight:bold;">⚠️ Mapa da usina não carregado.</p>'; }
+
+        abrirModal('modalKML'); 
+        if (talhoesGleba.length > 0) { setTimeout(() => { mapKml.invalidateSize(); mapKml.fitBounds(geojsonLayerKml.getBounds()); }, 300); }
+    }
+
+    function toggleTalhaoKml(t) {
+        if(document.getElementById('checkTodosKml').checked) return;
+        let btn = document.getElementById('btnK-t-' + t), layer = featureLayersKml[t];
+        if(talhoesSelecionadosKml.has(t)) { talhoesSelecionadosKml.delete(t); if(btn) btn.classList.remove('selecionado'); if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); } 
+        else { talhoesSelecionadosKml.add(t); if(btn) btn.classList.add('selecionado'); if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); }
+    }
+
+    function toggleTodosTalhoesKml() {
+        let isTodos = document.getElementById('checkTodosKml').checked; talhoesSelecionadosKml.clear();
+        document.querySelectorAll('#boxTalhoesKml .btn-talhao').forEach(b => {
+            let t = b.innerText, layer = featureLayersKml[t];
+            if(isTodos) { talhoesSelecionadosKml.add(t); b.classList.add('selecionado'); b.style.opacity='0.6'; b.style.cursor='not-allowed'; if(layer) layer.setStyle({ fillColor: '#25D366', color: '#105e2d', fillOpacity: 0.7 }); } 
+            else { b.classList.remove('selecionado'); b.style.opacity='1'; b.style.cursor='pointer'; if(layer) layer.setStyle({ fillColor: '#f1f8e9', color: '#25D366', fillOpacity: 0.4 }); }
+        });
+    }
+
+    async function gerarKML() {
+        let d = todasDemandas.find(x => x.id === idAtualAcao); if(!d) return;
+        let tals = Array.from(talhoesSelecionadosKml); if(tals.length === 0) return alert("Selecione ao menos um talhão!");
+        let codFazendaDemanda = String(d.fazenda).split(' - ')[0].trim();
+        let feats = bancoLocal.filter(b => b.cod === codFazendaDemanda && String(b.gleba) === String(d.gleba) && tals.includes(String(b.talhao)));
+        if(feats.length === 0 || !feats[0].geom) return alert("⚠️ Talhão inválido.");
+
+        let bV = parseFloat(document.getElementById('kmlBuffer').value), sV = parseFloat(document.getElementById('kmlSimplificacao').value), gP = document.getElementById('kmlPontos').checked; 
+        let uniao = turf.feature(feats[0].geom); for(let i=1; i<feats.length; i++) uniao = turf.union(uniao, turf.feature(feats[i].geom));
+        let areaF = bV > 0 ? turf.buffer(uniao, bV, {units:'meters'}) : uniao; let simp = sV > 0 ? turf.simplify(areaF, {tolerance: sV, highQuality: false}) : areaF;
+        let nB = `${String(d.fazenda).replace(/ /g, '_')}_G${d.gleba}_${d.tipo.replace(' ','')}`;
+        let partes = simp.geometry.type === 'MultiPolygon' ? simp.geometry.coordinates.map(c => turf.polygon(c)) : [simp];
+
+        function gPts(pt, aHa) {
+            if(!gP) return ""; let q = Math.max(1, Math.round((aHa/100)*3)); let bb = turf.bbox(pt), cds = [];
+            for(let t=0; t<2000 && cds.length<(q*10); t++) { let p = turf.point([bb[0]+Math.random()*(bb[2]-bb[0]), bb[1]+Math.random()*(bb[3]-bb[1])]); if(turf.booleanPointInPolygon(p, pt)) cds.push(p.geometry.coordinates); }
+            if(!cds.length) cds.push(turf.centerOfMass(pt).geometry.coordinates);
+            let s = [cds[0]]; while(s.length<q && s.length<cds.length) { let m=null, mx=-1; cds.forEach(c=>{ if(!s.includes(c)) { let md = Math.min(...s.map(ss=>turf.distance(turf.point(c), turf.point(ss)))); if(md>mx) { mx=md; m=c; }}}); if(m) s.push(m); }
+            return s.sort((a,b)=>a[0]-b[0]).map((p,i)=>`<Placemark><name>P${i+1}</name><Point><coordinates>${p[0].toFixed(7)},${p[1].toFixed(7)},0</coordinates></Point></Placemark>`).join("");
+        }
+
+        if(partes.length === 1) {
+            let sc = partes[0].geometry.coordinates[0].map(c=>`${c[0]},${c[1]},0`).join(" "); let aHa = turf.area(partes[0])/10000;
+            saveAs(new Blob([`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${nB}</name><Style id="r"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style><Placemark><name>${aHa.toFixed(2)} HA</name><styleUrl>#r</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>${sc}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>${gPts(partes[0], aHa)}</Document></kml>`], {type: "application/vnd.google-earth.kml+xml"}), nB+".kml");
+        } else {
+            let z = new JSZip();
+            partes.forEach((pt, i) => {
+                let sc = pt.geometry.coordinates[0].map(c=>`${c[0]},${c[1]},0`).join(" "); let aHa = turf.area(pt)/10000;
+                z.file(`${nB}_PT${String(i+1).padStart(2,'0')}.kml`, `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${nB}_PT${i+1}</name><Style id="r"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style><Placemark><name>${aHa.toFixed(2)} HA</name><styleUrl>#r</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>${sc}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>${gPts(pt, aHa)}</Document></kml>`);
+            });
+            z.generateAsync({type:"blob"}).then(c => saveAs(c, nB+".zip"));
+        }
+        fecharModais();
+    }
+
+    window.onload = async () => { 
+        let dS = await lerDoCelular(); if(dS) bancoLocal = dS;
+        baixarBanco(); 
+    };
+</script>
+</body>
+</html>

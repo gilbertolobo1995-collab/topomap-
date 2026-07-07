@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TopoMap</title>
+    
+    <!-- FIREBASE -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="logo-topomap.png">
+    <link rel="apple-touch-icon" href="logo-topomap.png">
+    <meta name="theme-color" content="#1a73e8">
+    
+    <style>
+        :root {
+            --primary-green: #1b5e20;
+            --light-green: #e8f5e9;
+            --highlight-yellow: #fff9c4;
+            --border-yellow: #fbc02d;
+            --bg-gray: #f4f6f8;
+            --surface: #ffffff;
+            --text-main: #333333;
+            --text-muted: #888888;
+            --blue-info: #e3f2fd;
+            --blue-text: #1565c0;
+            --shadow: 0 3px 6px rgba(0,0,0,0.08);
+            --radius: 14px;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-gray); 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+
+        /* TELA DE LOGIN */
+        #telaLoginSegura { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg-gray); z-index: 999999; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        .login-card { 
+            background: var(--surface); padding: 25px; border-radius: var(--radius); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 85%; max-width: 320px; text-align: center; 
+        }
+        .login-card h2 { margin-top: 0; color: var(--text-main); font-size: 20px; }
+        .login-card input { 
+            width: 100%; padding: 12px; margin-bottom: 12px; 
+            border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; 
+        }
+        .login-card button { 
+            width: 100%; padding: 12px; border: none; border-radius: 8px; 
+            font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 14px; 
+        }
+        .btn-login-primary { background: #1a73e8; color: white; }
+        .btn-login-secondary { background: #6c757d; color: white; }
+
+        /* HEADER / NAVEGAÇÃO */
+        .header { 
+            background: #1a73e8; color: white; padding: 12px 16px; 
+            display: none; align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 10; 
+        }
+        .back-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; }
+
+        /* AREA DE CONTEÚDO */
+        .content-area { 
+            flex: 1; overflow-y: auto; padding: 20px 16px; 
+            display: flex; flex-direction: column; align-items: center; 
+            scrollbar-width: none; 
+        }
+        .content-area::-webkit-scrollbar { display: none; }
+
+        /* LOGOS */
+        .logos-container { 
+            background: var(--surface); border-radius: var(--radius); 
+            padding: 15px; box-shadow: var(--shadow); border: 1px solid #e0e0e0; 
+            display: flex; justify-content: center; align-items: center; gap: 20px; 
+            width: 100%; max-width: 480px; box-sizing: border-box; 
+            margin-bottom: 20px; 
+        }
+        .img-logo-topomap { height: 60px; width: auto; object-fit: contain; }
+        .logo-separator { width: 1px; height: 40px; background-color: #e0e0e0; }
+        .img-logo-adecoagro { height: 50px; width: auto; object-fit: contain; }
+
+        /* BARRA DE STATUS (VENTO/KP) */
+        .status-bar { 
+            background: var(--blue-info); border-radius: var(--radius); 
+            padding: 12px; display: flex; justify-content: space-around; align-items: center; 
+            width: 100%; max-width: 480px; box-sizing: border-box; 
+            margin-bottom: 25px; box-shadow: var(--shadow); border: 1px solid #bbdefb;
+        }
+        .status-item { font-size: 13px; font-weight: bold; color: var(--blue-text); display: flex; align-items: center; gap: 6px; }
+
+        /* CATEGORIAS */
+        .categoria { 
+            width: 100%; max-width: 480px; font-size: 11px; color: var(--text-muted); 
+            font-weight: bold; text-transform: uppercase; margin-top: 20px; 
+            margin-bottom: 10px; text-align: left; letter-spacing: 0.8px; 
+        }
+
+        /* GRID DE MENU */
+        .grid-menu { 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; 
+            width: 100%; max-width: 480px; padding-bottom: 30px; 
+        }
+
+        /* CARDS */
+        .card { 
+            background: var(--surface); border-radius: var(--radius); 
+            padding: 16px 10px; text-align: center; box-shadow: var(--shadow); 
+            cursor: pointer; transition: transform 0.1s, background 0.2s; 
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; gap: 8px; border: 1px solid #e0e0e0; 
+        }
+        .card:active { transform: scale(0.96); }
+        .card-icon { font-size: 28px; }
+        .card-title { font-size: 13px; font-weight: 700; color: var(--text-main); line-height: 1.2; }
+
+        /* ESTILOS ESPECÍFICOS DE CARDS */
+        .card-highlight { 
+            grid-column: span 2; background: var(--highlight-yellow); 
+            border-color: var(--border-yellow); 
+        }
+        .card-highlight .card-title { color: #615100; font-size: 15px; }
+
+        .card-secondary { 
+            background: var(--light-green); border-color: #c8e6c9; 
+        }
+        .card-secondary .card-title { color: #1b5e20; }
+
+        /* IFRAME FULLSCREEN */
+        iframe { 
+            width: 100%; height: 100%; border: none; 
+            display: none; position: absolute; top: 0; left: 0; 
+            background: var(--bg-gray); z-index: 5; 
+        }
+
+        #btnTema { 
+            position: absolute; top: 12px; right: 15px; 
+            background: none; border: none; font-size: 24px; 
+            cursor: pointer; z-index: 100; 
+        }
+
+        /* DARK MODE */
+        body.dark-theme { background-color: #121212; color: #e0e0e0; }
+        .dark-theme .logos-container, .dark-theme .card { background: #1e1e1e; border-color: #333; }
+        .dark-theme .card-title { color: #e0e0e0; }
+        .dark-theme .categoria { color: #aaa; }
+        .dark-theme .status-bar { background: #1a237e; border-color: #303f9f; }
+        .dark-theme .status-item { color: #9fa8da; }
+        .dark-theme .card-highlight { background: #332b00; border-color: #fbc02d; }
+        .dark-theme .card-highlight .card-title { color: #ffe082; }
+        .dark-theme .card-secondary { background: #1b331b; border-color: #2e7d32; }
+        .dark-theme .card-secondary .card-title { color: #81c784; }
+    </style>
+</head>
+<body>
+
+    <!-- TELA DE LOGIN -->
+    <div id="telaLoginSegura">
+        <div class="login-card">
+            <h2 style="margin-bottom: 20px;">🚜 TopoMap Adecoagro</h2>
+            <input type="email" id="emailCorp" placeholder="E-mail @adecoagro.com">
+            <input type="password" id="senhaCorp" placeholder="Senha">
+            <button onclick="entrarApp()" class="btn-login-primary">Entrar</button>
+            <button onclick="criarContaApp()" class="btn-login-secondary">Criar Conta</button>
+        </div>
+    </div>
+
+    <button id="btnTema" onclick="toggleTema()">🌙</button>
+
+    <div class="header" id="mainHeader">
+        <button class="back-btn" id="btnVoltar" onclick="voltarMenu()">&#10094;</button>
+        <span id="tituloHeader" style="font-weight:bold;">TopoMap</span>
+        <div style="width: 24px;"></div>
+    </div>
+
+    <div class="content-area" id="areaConteudo">
+        <!-- Topo Logos -->
+        <div class="logos-container" id="logosTopo">
+            <img src="logo-topomap.png" alt="TopoMap" class="img-logo-topomap">
+            <div class="logo-separator"></div>
+            <img src="logo-adecoagro.jpg" alt="Adecoagro" class="img-logo-adecoagro">
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="statusBar">
+            <div class="status-item" id="txtVento">🌬️ Vento: Lendo GPS...</div>
+            <div style="width: 1px; height: 20px; background: #90caf9;"></div>
+            <div class="status-item" id="txtKp">🛰️ KP: Consultando...</div>
+        </div>
+
+        <!-- Menu Principal -->
+        <div class="grid-menu" id="menuInicial">
+            
+            <div class="categoria">CONTROLE OPERACIONAL</div>
+            
+            <div class="card card-highlight" onclick="abrirApp('demandas.html', 'Gestão de Demandas')">
+                <div class="card-icon">📋</div>
+                <div class="card-title">Gestão de Demandas</div>
+            </div>
+
+            <div class="card card-secondary" onclick="abrirApp('cana_planta.html', 'Cana-Planta')">
+                <div class="card-icon">🌱</div>
+                <div class="card-title">Cana-Planta (Campo)</div>
+            </div>
+
+            <div class="card card-secondary" onclick="abrirApp('historico_cana_gestor.html', 'Histórico Cana')">
+                <div class="card-icon">📊</div>
+                <div class="card-title">Histórico Cana (Gestor)</div>
+            </div>
+
+            <div class="card" onclick="abrirApp('historico_qualidade.html', 'Histórico Sistematização')">
+                <div class="card-icon">🚜</div>
+                <div class="card-title">Histórico Sistematização</div>
+            </div>
+
+            <div class="card" onclick="abrirApp('historico_ambiental.html', 'Histórico Ambiental')">
+                <div class="card-icon">🌲</div>
+                <div class="card-title">Histórico Ambiental</div>
+            </div>
+
+            <div class="categoria">OPERAÇÃO DE CAMPO</div>
+            <div class="card" onclick="abrirApp('navegacao.html', 'Navegação')"><div class="card-icon">🧭</div><div class="card-title">Navegação</div></div>
+            <div class="card" onclick="abrirApp('qualidade_sistematizacao.html', 'Qualidade')"><div class="card-icon">🚜</div><div class="card-title">Qualidade Sistematização</div></div>
+            <div class="card" onclick="abrirApp('ambiental.html', 'Ambiental')"><div class="card-icon">🍃</div><div class="card-title">Levantamento Ambiental</div></div>
+            <div class="card" onclick="abrirApp('kml_individual.html', 'KML')"><div class="card-icon">🎯</div><div class="card-title">KML Individual</div></div>
+            <div class="card" onclick="abrirApp('informativo_voo.html', 'Voo')"><div class="card-icon">📢</div><div class="card-title">Aviso de Voo</div></div>
+            <div class="card" onclick="abrirApp('relatorio.html', 'Relatório')"><div class="card-icon">📝</div><div class="card-title">Relatório de Voo</div></div>
+
+            <div class="categoria">LOGÍSTICA</div>
+            <div class="card" style="grid-column: span 2;" onclick="abrirApp('entrega_hd.html', 'Entrega de HD')">
+                <div class="card-icon">💾</div>
+                <div class="card-title">Entrega de HD</div>
+            </div>
+        </div>
+
+        <iframe id="appFrame" src=""></iframe>
+    </div>
+
+    <script>
+        function toggleTema() {
+            document.body.classList.toggle('dark-theme');
+            let isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('topo_tema', isDark ? 'dark' : 'light');
+            document.getElementById('btnTema').innerText = isDark ? '☀️' : '🌙';
+        }
+        function abrirApp(url, titulo) {
+            document.getElementById('menuInicial').style.display = 'none';
+            document.getElementById('logosTopo').style.display = 'none';
+            document.getElementById('statusBar').style.display = 'none';
+            document.getElementById('btnTema').style.display = 'none';
+            document.getElementById('appFrame').src = url;
+            document.getElementById('appFrame').style.display = 'block';
+            document.getElementById('mainHeader').style.display = 'flex';
+            document.getElementById('tituloHeader').innerText = titulo;
+        }
+        function voltarMenu() {
+            document.getElementById('appFrame').style.display = 'none';
+            document.getElementById('appFrame').src = "";
+            document.getElementById('mainHeader').style.display = 'none';
+            document.getElementById('menuInicial').style.display = 'grid';
+            document.getElementById('logosTopo').style.display = 'flex';
+            document.getElementById('statusBar').style.display = 'flex';
+            document.getElementById('btnTema').style.display = 'block';
+        }
+        window.onload = function() { if(localStorage.getItem('topo_tema') === 'dark') toggleTema(); }
+
+        // --- SISTEMA DE LOGIN ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgByd7HWSZPQxuYI6Wwl4y_bUkrfJVhBE",
+            authDomain: "radar-topomap.firebaseapp.com",
+            projectId: "radar-topomap",
+            storageBucket: "radar-topomap.firebasestorage.app",
+            messagingSenderId: "1010807425605",
+            appId: "1:1010807425605:web:367d82727377cb도_Cana_v3"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        firebase.auth().onAuthStateChanged(function(user) {
+            if (user) {
+                document.getElementById('telaLoginSegura').style.display = 'none';
+            } else {
+                document.getElementById('telaLoginSegura').style.display = 'flex';
+            }
+        });
+
+        function entrarApp() {
+            let e = document.getElementById('emailCorp').value.trim();
+            let s = document.getElementById('senhaCorp').value;
+            firebase.auth().signInWithEmailAndPassword(e, s).catch(function(error) {
+                alert("E-mail ou senha incorretos!");
+            });
+        }
+
+        function criarContaApp() {
+            let e = document.getElementById('emailCorp').value.trim();
+            let s = document.getElementById('senhaCorp').value;
+            if (!e.includes("@adecoagro.com")) {
+                alert("Acesso restrito! Use seu e-mail @adecoagro.com");
+                return;
+            }
+            firebase.auth().createUserWithEmailAndPassword(e, s).then(function() {
+                alert("Conta criada com sucesso!");
+            }).catch(function(error) {
+                alert("Erro ao criar conta: " + error.message);
+            });
+        }
+    </script>
+</body>
+</html>

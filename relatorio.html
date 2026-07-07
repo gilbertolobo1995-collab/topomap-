@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Relatório de Voo - TopoMap</title>
+    
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <style>
+        :root {
+            --primary-green: #1b5e20;
+            --primary-light: #4caf50;
+            --bg-gray: #f4f6f8;
+            --surface: #ffffff;
+            --text-main: #333333;
+            --border-color: #dadce0;
+            --radius: 12px;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-gray); 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 100vh; 
+        }
+
+        .header { 
+            background: linear-gradient(135deg, #0a3d0a, #1b5e20);
+            color: white; 
+            padding: 15px 20px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        .header .logo { width: 35px; height: 35px; border-radius: 8px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .header .title { font-size: 17px; font-weight: 800; letter-spacing: 0.5px; }
+
+        .container { padding: 20px 16px; max-width: 500px; margin: auto; width: 100%; box-sizing: border-box; }
+
+        .card { 
+            background: var(--surface); 
+            padding: 20px; 
+            border-radius: var(--radius); 
+            box-shadow: var(--shadow); 
+            margin-bottom: 20px; 
+            border: 1px solid var(--border-color);
+        }
+        .card h3 { margin: 0 0 15px 0; color: var(--primary-green); font-size: 16px; display: flex; align-items: center; gap: 8px; }
+
+        label { 
+            display: block; 
+            font-size: 11px; 
+            font-weight: bold; 
+            color: var(--primary-green); 
+            text-transform: uppercase; 
+            margin-bottom: 5px; 
+            margin-top: 15px;
+        }
+        input, select { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 8px; 
+            font-size: 15px; 
+            box-sizing: border-box; 
+            background: #f9f9f9; 
+            transition: 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary-green); outline: none; background: #fff; }
+        input:disabled { background-color: #eceff1; color: #78909c; cursor: not-allowed; }
+
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+
+        .battery-grid { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 8px; 
+            margin-top: 10px; 
+        }
+        .battery-item { 
+            background: #fcfcfc; 
+            border: 1px solid var(--border-color); 
+            padding: 8px 4px; 
+            border-radius: 6px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 5px; 
+            font-size: 12px; 
+            cursor: pointer; 
+            transition: 0.2s;
+        }
+        .battery-item input { width: 16px; height: 16px; margin: 0; }
+        .battery-item:has(input:checked) { 
+            background: #e3f2fd; 
+            border-color: #1a73e8; 
+            color: #1a73e8; 
+            font-weight: bold;
+        }
+
+        .import-box { 
+            background: #e3f2fd; 
+            border: 1px dashed #1a73e8; 
+            padding: 15px; 
+            border-radius: var(--radius); 
+            margin-bottom: 20px; 
+            display: none;
+            text-align: center;
+        }
+        .import-box label { color: #1a73e8; text-align: center; margin-bottom: 10px; cursor: pointer; }
+        .import-box input { display: none; }
+
+        .btn-gerar { 
+            background: linear-gradient(135deg, #1a73e8, #1557b0); 
+            color: white; border: none; padding: 18px; width: 100%; 
+            font-size: 16px; border-radius: var(--radius); 
+            margin-top: 25px; font-weight: bold; cursor: pointer; 
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+            transition: 0.3s;
+        }
+        .btn-gerar:active { transform: scale(0.98); }
+
+        .dark-theme { background-color: #121212; color: #eee; }
+        .dark-theme .card { background: #1e1e1e; border-color: #333; color: #eee; }
+        .dark-theme .card h3 { color: #81c784; }
+        .dark-theme label { color: #81c784; }
+        .dark-theme input, .dark-theme select { background: #2a2a2a; border-color: #444; color: #fff; }
+        .dark-theme .battery-item { background: #252525; border-color: #444; color: #aaa; }
+        .dark-theme .battery-item:has(input:checked) { background: #1a237e; border-color: #3f51b5; color: #fff; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">📝</div>
+        <div class="title">Relatório de Operação</div>
+        <div style="width: 35px;"></div>
+    </div>
+
+    <div class="container">
+        <div class="import-box" id="boxImportarMapa">
+            <label for="zipFile">⚙️ Importar Banco de Fazendas (.ZIP)</label>
+            <input type="file" id="zipFile" accept=".zip" onchange="importarBancoDeDados()">
+            <p style="font-size: 11px; color: #666; margin: 5px 0 0 0;">Carregue o mapa da usina para liberar as listas automáticas.</p>
+        </div>
+
+        <div class="card">
+            <h3>🚁 Equipamento de Voo</h3>
+            <label>Modelo do Drone:</label>
+            <select id="modeloDrone" onchange="mostrarUnidadesDrone(); salvarPref()">
+                <option value="">Selecione o Modelo...</option>
+                <option value="Matrice 4E">Matrice 4 Enterprise</option>
+                <option value="Mavic 3M">Mavic 3 Multispectral</option>
+                <option value="eBee X">senseFly eBee X</option>
+                <option value="eBee Geo">senseFly eBee Geo</option>
+            </select>
+
+            <div id="boxUnidadeDrone" style="display: none;">
+                <label>Unidade (ID | S/N):</label>
+                <select id="snDrone" onchange="atualizarBaterias(); salvarPref()"></select>
+            </div>
+
+            <label id="labelBaterias" style="display: none;">Bateria(s) Utilizada(s):</label>
+            <div id="containerBaterias" class="battery-grid"></div>
+        </div>
+
+        <div class="card">
+            <h3>🛰️ Base GNSS</h3>
+            <label>Modelo da Base:</label>
+            <select id="modeloBase" onchange="mostrarUnidadesBase(); salvarPref()">
+                <option value="">Selecione a Base...</option>
+                <option value="R980">Trimble R980</option>
+                <option value="R12i">Trimble R12i</option>
+            </select>
+
+            <div id="boxUnidadeBase" style="display: none;">
+                <label>S/N da Base:</label>
+                <select id="snBase" onchange="salvarPref()"></select>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📍 Localização e Missão</h3>
+            <div class="row">
+                <div>
+                    <label>Código:</label>
+                    <select id="codigo" onchange="atualizarGlebasRelatorio()">
+                        <option value="">Aguardando...</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Gleba:</label>
+                    <select id="gleba">
+                        <option value="">Selecione o Código</option>
+                    </select>
+                </div>
+            </div>
+            
+            <label>Nome da Área:</label>
+            <input type="text" id="nomeArea" disabled placeholder="Preenchimento Automático">
+
+            <label>Finalidade do Voo:</label>
+            <select id="finalidade" onchange="verificarFinalidade()">
+                <option value="Cana Soca">Cana Soca</option>
+                <option value="Cana Planta">Cana Planta</option>
+                <option value="Planialtimétrico">Planialtimétrico</option>
+                <option value="Volumetria">Volumetria</option>
+                <option value="Daninhas">Daninhas</option>
+            </select>
+        </div>
+
+        <div class="card">
+            <h3>⏱️ Detalhes Técnicos</h3>
+            <div class="row">
+                <div><label>Hora Início:</label><input type="time" id="horaInicio"></div>
+                <div><label>Hora Fim:</label><input type="time" id="horaFim"></div>
+            </div>
+
+            <div class="row">
+                <div><label>Altura Voo (m):</label><input type="number" id="alturaVoo" placeholder="100"></div>
+                <div><label>Sobreposição:</label><input type="text" id="sobreposicao" placeholder="70/70"></div>
+                <div><label>GSD (cm):</label><input type="number" id="gsd" placeholder="2.5" step="0.1"></div>
+            </div>
+
+            <div class="row" id="blocoAlturaCana" style="display: none;">
+                <div><label>Cana Mín (m):</label><input type="number" id="alturaCanaMin" placeholder="0.70" step="0.1"></div>
+                <div><label>Cana Máx (m):</label><input type="number" id="alturaCanaMax" placeholder="1.10" step="0.1"></div>
+            </div>
+        </div>
+
+        <button class="btn-gerar" onclick="gerarTXT()">📄 Baixar Relatório (TXT)</button>
+    </div>
+
+<script>
+    const drones = {
+        "Matrice 4E": { unidades: [{ id: "ID 11", sn: "1581F7FVC259V00D7DJF" }, { id: "ID 12", sn: "1581F7FVC259V00D0T1X" }, { id: "ID 13", sn: "1581F7FVC258M00D7Q81" }], bats: ["38","39","40","41","42","43","44","45","46","47","48","49"] },
+        "Mavic 3M": { unidades: [{ id: "ID 07", sn: "2070000002802" }, { id: "ID 08", sn: "1581F5FKC24CH00DDM0T" }], bats: ["01","02","03","04","05","06","07","08","09","10","11","12","14","15","16","17","18","20"] },
+        "eBee X": { unidades: [{ id: "ID 04", sn: "X-IX-12-50028" }, { id: "ID 06", sn: "IX-12-51056" }], bats: ["19","21","22","23","24","25","26","28","29","30","31","32","33","34","35","36","37"] },
+        "eBee Geo": { unidades: [{ id: "ID 05", sn: "IX-12-13067" }], bats: ["19","21","22","23","24","25","26","28","29","30","31","32","33","34","35","36","37"] }
+    };
+
+    const bases = {
+        "R980": [{ sn: "6433752064" }, { sn: "6433752028" }, { sn: "6431749667" }],
+        "R12i": [{ sn: "6327F00878" }, { sn: "6328F00927" }, { sn: "6412722891" }, { sn: "6227F00726" }]
+    };
+
+    async function importarBancoDeDados() {
+        const zipFile = document.getElementById('zipFile').files[0];
+        if (!zipFile) return;
+        document.getElementById('codigo').innerHTML = '<option>Lendo arquivo...</option>';
+        try {
+            const zipBuffer = await zipFile.arrayBuffer();
+            let geojson = await shp(zipBuffer);
+            if (Array.isArray(geojson)) geojson = geojson[0];
+            let banco = {};
+            geojson.features.forEach(f => {
+                let p = {};
+                for (let k in f.properties) p[k.toUpperCase()] = f.properties[k];
+                let cod = String(p["FAZENDA"] || "").trim();
+                let nome = String(p["PROPRIEDAD"] || "AREA").trim();
+                let gleba = String(p["GLEBA"] || "").trim();
+                if(cod !== "") {
+                    if(!banco[cod]) banco[cod] = { nome: nome, glebas: new Set() };
+                    if(gleba !== "") banco[cod].glebas.add(gleba);
+                }
+            });
+            for(let cod in banco) {
+                banco[cod].glebas = Array.from(banco[cod].glebas).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            }
+            localStorage.setItem('topo_banco_fazendas_v2', JSON.stringify(banco));
+            alert("✅ Banco de Fazendas importado!");
+            document.getElementById('boxImportarMapa').style.display = 'none';
+            carregarListasRelatorio();
+        } catch (e) {
+            alert("Erro ao ler ZIP!");
+            document.getElementById('codigo').innerHTML = '<option value="">Erro</option>';
+        }
+    }
+
+    function carregarListasRelatorio() {
+        let bancoStr = localStorage.getItem('topo_banco_fazendas_v2');
+        if(!bancoStr) {
+            document.getElementById('boxImportarMapa').style.display = 'block';
+            document.getElementById('codigo').innerHTML = '<option value="">Importe o ZIP acima ⬆️</option>';
+            return;
+        }
+        let banco = JSON.parse(bancoStr);
+        let selectCod = document.getElementById('codigo');
+        selectCod.innerHTML = '<option value="">Selecione o Cód...</option>';
+        let codigos = Object.keys(banco).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        codigos.forEach(c => { selectCod.innerHTML += `<option value="${c}">${c} - ${banco[c].nome}</option>`; });
+    }
+
+    function atualizarGlebasRelatorio() {
+        let cod = document.getElementById('codigo').value;
+        let bancoStr = localStorage.getItem('topo_banco_fazendas_v2');
+        if(!bancoStr || !cod) return;
+        let banco = JSON.parse(bancoStr);
+        let info = banco[cod];
+        document.getElementById('nomeArea').value = info.nome;
+        let selectGleba = document.getElementById('gleba');
+        selectGleba.innerHTML = '<option value="">Qual Gleba?</option>';
+        info.glebas.forEach(g => { selectGleba.innerHTML += `<option value="${g}">Gleba ${g}</option>`; });
+    }
+
+    function mostrarUnidadesDrone() {
+        const modelo = document.getElementById('modeloDrone').value;
+        const box = document.getElementById('boxUnidadeDrone');
+        const selectSn = document.getElementById('snDrone');
+        selectSn.innerHTML = '<option value="">Escolha a Unidade...</option>';
+        if (!modelo) { box.style.display = 'none'; return; }
+        drones[modelo].unidades.forEach(u => selectSn.innerHTML += `<option value="${u.sn}">${u.id} | SN: ${u.sn}</option>`);
+        box.style.display = 'block';
+        atualizarBaterias();
+    }
+
+    function atualizarBaterias() {
+        const modelo = document.getElementById('modeloDrone').value;
+        const container = document.getElementById('containerBaterias');
+        const label = document.getElementById('labelBaterias');
+        container.innerHTML = "";
+        if (!modelo) { label.style.display = 'none'; return; }
+        label.style.display = 'block';
+        drones[modelo].bats.forEach(b => container.innerHTML += `<label class="battery-item"><input type="checkbox" name="bateria" value="${b}"> BAT-${b}</label>`);
+    }
+
+    function mostrarUnidadesBase() {
+        const modelo = document.getElementById('modeloBase').value;
+        const box = document.getElementById('boxUnidadeBase');
+        const selectSn = document.getElementById('snBase');
+        selectSn.innerHTML = '<option value="">Escolha o S/N...</option>';
+        if (!modelo) { box.style.display = 'none'; return; }
+        bases[modelo].forEach(b => selectSn.innerHTML += `<option value="${b.sn}">SN: ${b.sn}</option>`);
+        box.style.display = 'block';
+    }
+
+    function salvarPref() {
+        localStorage.setItem('tp_modDrone', document.getElementById('modeloDrone').value);
+        localStorage.setItem('tp_snDrone', document.getElementById('snDrone').value);
+        localStorage.setItem('tp_modBase', document.getElementById('modeloBase').value);
+        localStorage.setItem('tp_snBase', document.getElementById('snBase').value);
+    }
+
+    window.onload = function() {
+        verificarFinalidade();
+        carregarListasRelatorio();
+        if(localStorage.getItem('tp_modDrone')) {
+            document.getElementById('modeloDrone').value = localStorage.getItem('tp_modDrone');
+            mostrarUnidadesDrone();
+            setTimeout(() => {
+                if(localStorage.getItem('tp_snDrone')) {
+                    document.getElementById('snDrone').value = localStorage.getItem('tp_snDrone');
+                    atualizarBaterias();
+                }
+            }, 100);
+        }
+        if(localStorage.getItem('tp_modBase')) {
+            document.getElementById('modeloBase').value = localStorage.getItem('tp_modBase');
+            mostrarUnidadesBase();
+            setTimeout(() => {
+                if(localStorage.getItem('tp_snBase')) document.getElementById('snBase').value = localStorage.getItem('tp_snBase');
+            }, 100);
+        }
+    }
+
+    function verificarFinalidade() {
+        let f = document.getElementById('finalidade').value;
+        document.getElementById('blocoAlturaCana').style.display = (f.includes("Cana")) ? "flex" : "none";
+    }
+
+    function gerarTXT() {
+        const modelo = document.getElementById('modeloDrone').value;
+        const sn = document.getElementById('snDrone').value;
+        const baseModelo = document.getElementById('modeloBase').value;
+        const baseSn = document.getElementById('snBase').value;
+        if(!modelo || !sn || !baseModelo || !baseSn) { alert("Selecione Drone, Unidade e Base!"); return; }
+        let bats = Array.from(document.querySelectorAll('input[name="bateria"]:checked')).map(cb => cb.value).join(', ');
+        let dataHoje = new Date().toLocaleDateString('pt-BR');
+        let txt = `🚁 RELATÓRIO DE VOO 🚁\n📅 Data: ${dataHoje}\n\n📍 LOCAL\nCódigo: ${document.getElementById('codigo').value}\nÁrea: ${document.getElementById('nomeArea').value.toUpperCase()}\nGleba: ${document.getElementById('gleba').value}\n\n🎯 MISSÃO\nFinalidade: ${document.getElementById('finalidade').value}\nHorário: ${document.getElementById('horaInicio').value} às ${document.getElementById('horaFim').value}\nAltura de Voo: ${document.getElementById('alturaVoo').value}m\nSobreposição: ${document.getElementById('sobreposicao').value}\nGSD: ${document.getElementById('gsd').value} cm/px\n`;
+        if (document.getElementById('finalidade').value.includes("Cana")) {
+            txt += `Altura da Cana: ${document.getElementById('alturaCanaMin').value}m a ${document.getElementById('alturaCanaMax').value}m\n`;
+        }
+        txt += `\n🔋 EQUIPAMENTO\nDrone: ${modelo} (S/N: ${sn})\nBase: Trimble ${baseModelo} (S/N: ${baseSn})\nBateria(s) Usada(s): ${bats.length > 0 ? "Nº " + bats : "Não informado"}`;
+        let blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.href = url;
+        let codigoArq = document.getElementById('codigo').value || 'Generico';
+        a.download = `Relatorio_${codigoArq}_${dataHoje.replace(/\//g, '-')}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoramento de Cana-Planta Pro</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #1b5e20;
+            --primary-light: #4caf50;
+            --primary-dark: #0a3d0a;
+            --accent: #fbc02d;
+            --accent-dark: #f57f17;
+            --danger: #e53935;
+            --info: #1a73e8;
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --text: #1a1a2e;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --shadow-heavy: rgba(0, 0, 0, 0.25);
+            --glass: rgba(255, 255, 255, 0.85);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dark-mode {
+            --primary: #2e7d32;
+            --primary-light: #66bb6a;
+            --bg: #0f1923;
+            --surface: #1a2332;
+            --text: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --border: #2d3748;
+            --shadow: rgba(0, 0, 0, 0.3);
+            --shadow-heavy: rgba(0, 0, 0, 0.5);
+            --glass: rgba(26, 35, 50, 0.9);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            transition: background var(--transition), color var(--transition);
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            color: white;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            box-shadow: 0 2px 12px var(--shadow-heavy);
+            position: relative;
+            min-height: 52px;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--primary-light), var(--accent));
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .btn-voltar {
+            background: rgba(255,255,255,0.15);
+            border: none; color: white; font-size: 18px;
+            width: 36px; height: 36px; border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background var(--transition);
+        }
+        .btn-voltar:active { background: rgba(255,255,255,0.3); }
+        .header-title { font-weight: 700; font-size: 14px; letter-spacing: 0.3px; }
+        .header-title small { display: block; font-size: 10px; font-weight: 400; opacity: 0.8; margin-top: 1px; }
+        .header-actions { display: flex; gap: 4px; align-items: center; }
+        .btn-acao {
+            background: rgba(255,255,255,0.15); color: white; border: none;
+            width: 36px; height: 36px; border-radius: 10px; font-size: 16px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all var(--transition); position: relative;
+        }
+        .btn-acao:active { transform: scale(0.9); background: rgba(255,255,255,0.3); }
+        .btn-teste-ativo { background: #ff3d00 !important; animation: pulse-btn 2s infinite; }
+        @keyframes pulse-btn { 0%,100%{box-shadow:0 0 0 0 rgba(255,61,0,0.4);} 50%{box-shadow:0 0 0 8px rgba(255,61,0,0);} }
+
+        #ui-container { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+        #mapaContainer { flex: 1; position: relative; }
+        #mapaLivre { width: 100%; height: 100%; }
+
+        .counter-badge {
+            position: absolute; top: 12px; left: 12px; z-index: 1500;
+            background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: var(--text); padding: 8px 14px; border-radius: 25px;
+            font-weight: 700; font-size: 13px; box-shadow: 0 4px 16px var(--shadow);
+            display: none; border: 1px solid var(--border);
+        }
+        .counter-badge span { color: var(--primary); font-size: 16px; }
+        .stats-badge {
+            position: absolute; top: 12px; right: 12px; z-index: 1500;
+            background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: var(--text-secondary); padding: 10px 14px; border-radius: var(--radius);
+            font-size: 11px; font-family: 'SF Mono','Fira Code',monospace;
+            display: none; border: 1px solid var(--border); line-height: 1.8;
+            box-shadow: 0 4px 16px var(--shadow);
+        }
+        .stats-badge .val { color: var(--primary); font-weight: 700; font-size: 14px; }
+        .teste-badge {
+            position: absolute; top: 55px; left: 50%; transform: translateX(-50%); z-index: 1500;
+            background: linear-gradient(135deg, #ff3d00, #ff6d00); color: white;
+            padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 11px;
+            display: none; box-shadow: 0 4px 12px rgba(255,61,0,0.4); white-space: nowrap;
+        }
+
+        .btn-floating {
+            position: absolute; z-index: 1500; border: none; padding: 0 20px; height: 48px;
+            border-radius: 24px; font-weight: 700; font-size: 14px;
+            box-shadow: 0 4px 16px var(--shadow-heavy);
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            transition: all var(--transition); letter-spacing: 0.3px;
+        }
+        .btn-floating:active { transform: scale(0.95); }
+        .btn-foto { bottom: 85px; right: 15px; background: linear-gradient(135deg, #1a73e8, #1557b0); color: white; }
+        .btn-pdf { bottom: 145px; right: 15px; background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #1a1a2e; display: none; }
+        .btn-editar { bottom: 205px; right: 15px; background: linear-gradient(135deg, #7c4dff, #6200ea); color: white; display: none; }
+        .btn-exportar-excel { bottom: 265px; right: 15px; background: linear-gradient(135deg, #2e7d32, #1b5e20); color: white; display: none; }
+        .btn-dashboard { bottom: 85px; left: 15px; background: linear-gradient(135deg, #00838f, #006064); color: white; display: none; width: 48px; padding: 0; justify-content: center; font-size: 20px; }
+
+        .btn-center-gps {
+            position: absolute; bottom: 20px; right: 15px; z-index: 1500;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: var(--surface); border: 2px solid var(--border);
+            box-shadow: 0 4px 12px var(--shadow);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all var(--transition); color: var(--text-secondary);
+        }
+        .gps-icon-svg { width: 24px; height: 24px; stroke: currentColor; }
+        .btn-center-gps.seguindo { background: var(--info); border-color: var(--info); color: white; box-shadow: 0 0 20px rgba(26,115,232,0.4); }
+
+        .telemetry-panel {
+            background: var(--surface); color: var(--text); padding: 10px 16px 12px; z-index: 1500;
+            font-family: 'SF Mono','Fira Code',monospace; font-size: 12px;
+            border-top: 1px solid var(--border); box-shadow: 0 -2px 12px var(--shadow);
+        }
+        .tele-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); font-weight: 600; font-family: 'Segoe UI',sans-serif; }
+        .tele-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+        .tele-val { color: var(--text); font-weight: 700; font-size: 14px; margin-left: 4px; }
+        .tele-speed { color: var(--accent-dark); font-size: 20px; font-weight: 800; }
+        .tele-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e53935; margin-right: 6px; animation: blink-dot 1.5s infinite; }
+        .tele-dot.active { background: #4caf50; }
+        @keyframes blink-dot { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            z-index: 3000; align-items: flex-end; justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+        .modal-content {
+            background: var(--surface); color: var(--text); width: 100%; max-width: 480px;
+            padding: 20px; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            box-sizing: border-box; max-height: 92vh; overflow-y: auto;
+            display: flex; flex-direction: column; animation: slideUp 0.3s ease;
+            box-shadow: 0 -4px 24px var(--shadow-heavy);
+        }
+        .modal-content.modal-center { border-radius: var(--radius-lg); max-width: 420px; margin: auto; animation: scaleIn 0.3s ease; }
+        @keyframes slideUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
+        @keyframes scaleIn { from{transform:scale(0.9); opacity:0;} to{transform:scale(1); opacity:1;} }
+        .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 15px; }
+        .modal h3 { color: var(--primary); text-align: center; font-size: 17px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+        .input-group { margin-bottom: 14px; }
+        .input-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .input-group input, .input-group select {
+            width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: var(--radius);
+            box-sizing: border-box; font-size: 15px; background: var(--surface); color: var(--text);
+            transition: border-color var(--transition); outline: none;
+        }
+        .input-group input:focus { border-color: var(--primary); }
+        .input-readonly { background: rgba(27,94,32,0.08)!important; border-color: var(--primary-light)!important; color: var(--primary)!important; font-weight: 600!important; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .modal-btns { display: flex; gap: 10px; margin-top: 16px; }
+        .btn-save, .btn-cancel { flex: 1; padding: 14px; border: none; border-radius: var(--radius); font-weight: 700; cursor: pointer; font-size: 15px; transition: all var(--transition); }
+        .btn-save { background: linear-gradient(135deg, var(--primary-light), var(--primary)); color: white; }
+        .btn-save:active { transform: scale(0.97); }
+        .btn-cancel { background: var(--bg); color: var(--danger); border: 2px solid var(--danger); }
+        .btn-cancel:active { background: rgba(229,57,53,0.1); }
+
+        .foto-upload-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .foto-upload-btn {
+            flex: 1; padding: 12px 8px; border-radius: var(--radius); text-align: center;
+            cursor: pointer; font-size: 12px; font-weight: 700; border: 2px dashed;
+            transition: all var(--transition); display: flex; flex-direction: column;
+            align-items: center; gap: 4px;
+        }
+        .foto-upload-btn:active { transform: scale(0.97); }
+        .foto-cam { background: rgba(27,94,32,0.05); color: var(--primary); border-color: var(--primary); }
+        .foto-gal { background: rgba(26,115,232,0.05); color: var(--info); border-color: var(--info); }
+        .foto-cam-det { background: rgba(230,81,0,0.05); color: #e65100; border-color: #e65100; }
+        .foto-gal-det { background: rgba(136,14,79,0.05); color: #880e4f; border-color: #880e4f; }
+        .foto-icon { font-size: 22px; }
+        .foto-preview { width: 100%; max-height: 100px; object-fit: cover; border-radius: var(--radius); border: 2px solid var(--primary); display: none; margin-top: 4px; }
+
+        .info-auto { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; font-size: 12px; line-height: 1.6; border: 1px solid; }
+        .info-auto.success { background: rgba(76,175,80,0.1); border-color: var(--primary-light); color: var(--primary); }
+        .info-auto.warning { background: rgba(255,152,0,0.1); border-color: #ffb74d; color: #e65100; }
+        .info-auto.error { background: rgba(229,57,53,0.1); border-color: #ef9a9a; color: var(--danger); }
+        .altura-input { border: 2px solid var(--primary)!important; font-size: 20px!important; font-weight: 800!important; text-align: center; letter-spacing: 2px; }
+
+        .marker-number {
+            background: linear-gradient(135deg, #ff5722, #e64a19); color: #fff;
+            width: 30px; height: 30px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900; font-size: 13px; border: 3px solid #fff;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.4); z-index: 1000;
+        }
+
+        .ponto-item {
+            background: var(--bg); border-left: 4px solid var(--primary);
+            padding: 14px; margin-bottom: 10px; border-radius: var(--radius);
+            position: relative; transition: all var(--transition);
+        }
+        .ponto-item:active { transform: scale(0.98); }
+        .ponto-num { font-weight: 800; color: var(--primary); font-size: 14px; }
+        .ponto-info { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+        .ponto-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
+        .btn-del, .btn-locate { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; cursor: pointer; font-size: 14px; transition: all var(--transition); }
+        .btn-del:active { background: #ffcdd2; }
+        .btn-locate:active { background: #e3f2fd; }
+        .fotos-preview { display: flex; gap: 8px; margin-top: 8px; }
+        .fotos-preview img { width: 48%; height: 65px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .dash-card { background: var(--bg); border-radius: var(--radius); padding: 14px; text-align: center; border: 1px solid var(--border); }
+        .dash-card .dash-value { font-size: 28px; font-weight: 800; color: var(--primary); line-height: 1; }
+        .dash-card .dash-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-top: 4px; font-weight: 600; }
+        .dash-card.accent .dash-value { color: var(--accent-dark); }
+        .dash-card.danger .dash-value { color: var(--danger); }
+        .dash-card.info .dash-value { color: var(--info); }
+        .dash-bar-chart { margin-bottom: 16px; }
+        .dash-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+        .dash-bar-label { min-width: 55px; text-align: right; font-weight: 600; color: var(--text-secondary); }
+        .dash-bar-track { flex: 1; height: 22px; background: var(--bg); border-radius: 11px; overflow: hidden; border: 1px solid var(--border); }
+        .dash-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary-light), var(--primary)); border-radius: 11px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 10px; font-weight: 700; color: white; min-width: 30px; }
+
+        .search-bar { position: absolute; top: 55px; left: 12px; right: 12px; z-index: 1500; display: none; }
+        .search-bar input { width: 100%; padding: 12px 16px 12px 40px; border: 2px solid var(--border); border-radius: 25px; background: var(--glass); backdrop-filter: blur(12px); font-size: 14px; color: var(--text); outline: none; box-shadow: 0 4px 16px var(--shadow); }
+        .search-bar input:focus { border-color: var(--primary); }
+        .search-bar .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; opacity: 0.5; }
+        .search-results { background: var(--surface); border-radius: var(--radius); margin-top: 6px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 16px var(--shadow); display: none; }
+        .search-result-item { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+        .search-result-item:active { background: rgba(27,94,32,0.1); }
+        .search-result-item:last-child { border-bottom: none; }
+
+        .toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: var(--surface); color: var(--text); padding: 12px 24px; border-radius: 25px;
+            font-size: 14px; font-weight: 600; z-index: 9999; opacity: 0;
+            transition: all 0.3s ease; pointer-events: none;
+            box-shadow: 0 8px 24px var(--shadow-heavy); max-width: 90%;
+            text-align: center; border: 1px solid var(--border);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.success { border-left: 4px solid #4caf50; }
+        .toast.error { border-left: 4px solid #e53935; }
+        .toast.info { border-left: 4px solid #1a73e8; }
+
+        .loading-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 9998;
+            align-items: center; justify-content: center; flex-direction: column; gap: 20px;
+        }
+        .loading-overlay.show { display: flex; }
+        .loading-spinner { width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.15); border-top-color: var(--primary-light); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .loading-text { color: white; font-weight: 700; font-size: 15px; }
+        .loading-progress { width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden; }
+        .loading-progress-bar { height: 100%; background: var(--primary-light); border-radius: 2px; animation: progress-indeterminate 1.5s ease infinite; }
+        @keyframes spin { to{transform:rotate(360deg);} }
+        @keyframes progress-indeterminate { 0%{width:0%; margin-left:0;} 50%{width:60%; margin-left:20%;} 100%{width:0%; margin-left:100%;} }
+
+        .historico-item { background: var(--bg); border-left: 4px solid var(--primary); padding: 12px 14px; margin-bottom: 10px; border-radius: var(--radius); font-size: 13px; line-height: 1.6; }
+        .historico-item .hist-date { color: var(--primary); font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+
+        .talhao-tooltip { background: var(--glass)!important; backdrop-filter: blur(8px); border: 1px solid var(--primary)!important; border-radius: 8px!important; padding: 6px 10px!important; font-weight: 600!important; color: var(--primary)!important; box-shadow: 0 2px 8px var(--shadow)!important; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        #pdfLayout { display: none; background: white; width: 794px; padding: 35px; box-sizing: border-box; font-family: Arial, sans-serif; position: absolute; top: -9999px; left: -9999px; }
+        .pdf-header { text-align: center; border-bottom: 3px solid #1b5e20; padding-bottom: 10px; margin-bottom: 15px; }
+        .pdf-title { color: #0f2847; font-size: 26px; font-weight: bold; text-transform: uppercase; margin: 0; }
+        .pdf-subtitle { color: #555; font-size: 14px; margin: 5px 0 0 0; font-weight: bold; }
+        .pdf-table-title { font-size: 13px; font-weight: bold; color: #1b5e20; margin-bottom: 6px; text-transform: uppercase; border-left: 5px solid #1b5e20; padding-left: 8px; margin-top: 15px; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; table-layout: fixed; }
+        .pdf-table th, .pdf-table td { border: 1px solid #888; padding: 7px; text-align: left; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+        .pdf-table th { background-color: #1b5e20; color: white; text-transform: uppercase; font-size: 10px; font-weight: bold; }
+        .pdf-table td { white-space: nowrap; color: #000; }
+        .pdf-table td.wrap-text { white-space: normal; word-wrap: break-word; }
+        .pdf-table a { color: #1a73e8; text-decoration: none; font-size: 10px; }
+        .pdf-summary-box { background: #e8f5e9; border: 2px solid #1b5e20; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; margin-top: 10px; }
+        .pdf-summary-item { font-size: 13px; font-weight: bold; color: #1b5e20; }
+        .pdf-summary-item span { color: #000; font-size: 16px; margin-left: 5px; }
+        .pdf-page-break { page-break-before: always; margin-top: 25px; }
+        .pdf-photos-pairs { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
+        .pdf-photo-pair { border: 2px solid #1b5e20; border-radius: 10px; padding: 10px; page-break-inside: avoid; }
+        .pdf-photo-pair-title { font-weight: bold; color: #1b5e20; font-size: 13px; margin-bottom: 8px; text-transform: uppercase; text-align: center; }
+        /* Detalhe (régua) fica maior que a ampla para dar leitura da medição */
+        .pdf-photo-pair-imgs { display: grid; grid-template-columns: 5fr 7fr; gap: 10px; align-items: start; }
+        .pdf-photo-card { background: #f5f5f5; border: 1px solid #ddd; padding: 4px; border-radius: 8px; text-align: center; }
+        .pdf-photo-card .pdf-photo-cap { font-size: 9px; font-weight: bold; color: #555; text-transform: uppercase; margin-bottom: 3px; letter-spacing: .5px; }
+        .pdf-photo-card img { width: 100%; height: 360px; object-fit: contain; border-radius: 5px; display: block; image-rendering: -webkit-optimize-contrast; }
+        .pdf-photo-card.detalhe img { height: 460px; }
+        .pdf-photo-location { font-size: 10px; color: #1a73e8; margin-top: 3px; }
+        .pdf-photo-location a { color: #1a73e8; text-decoration: underline; }
+
+        .pdf-map-section { margin: 15px 0; text-align: center; }
+        .pdf-map-section img { width: 100%; max-height: 500px; object-fit: contain; border: 2px solid #1b5e20; border-radius: 8px; }
+
+        body.printing { width: 800px!important; height: auto!important; overflow: visible!important; background: white; }
+        .printing #ui-container, .printing .header { display: none!important; }
+        .printing #pdfLayout { display: block!important; position: relative; top: 0; left: 0; z-index: 99999; margin: 0 auto; }
+
+        @media (min-width: 768px) { .modal-content { max-width: 520px; border-radius: var(--radius-lg); margin: auto; } }
+        @media (max-height: 600px) { .telemetry-panel { padding: 6px 12px 8px; } .tele-speed { font-size: 16px; } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="btn-voltar" onclick="voltarParaMenu()">‹</button>
+            <div class="header-title">🛰️ TopoMap · Cana-Planta<small id="headerSubtitle">Monitoramento de campo</small></div>
+        </div>
+        <div class="header-actions">
+            <button class="btn-acao" id="btnTemaApp" onclick="toggleTemaApp()" title="Tema">🌙</button>
+            <button class="btn-acao" id="btnSearch" onclick="toggleSearch()" title="Buscar">🔍</button>
+            <button class="btn-acao" onclick="abrirHistoricoNuvem()" title="Nuvem">☁️</button>
+            <button class="btn-acao" onclick="document.getElementById('inputZips').click()" title="Mapa">🗺️</button>
+            <button class="btn-acao" onclick="document.getElementById('inputPlanilha').click()" title="Dados">📊</button>
+            <button class="btn-acao" id="btnModoTeste" onclick="toggleModoTeste()" title="Teste">🧪</button>
+        </div>
+        <input type="file" id="inputZips" accept=".zip" style="display:none" onchange="processarZips(event)">
+        <input type="file" id="inputPlanilha" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarPlanilha(event)">
+    </div>
+
+    <div id="ui-container">
+        <div id="mapaContainer">
+            <div id="mapaLivre"></div>
+            <div class="search-bar" id="searchBar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" placeholder="Buscar talhão, fazenda, gleba..." oninput="filtrarBusca(this.value)">
+                <div class="search-results" id="searchResults"></div>
+            </div>
+            <div class="teste-badge" id="testeBadge">🧪 MODO TESTE — Toque no mapa</div>
+            <div class="counter-badge" id="counterBadge">📍 Pontos: <span id="counterNum">0</span></div>
+            <div class="stats-badge" id="statsBadge">Média Alt: <span class="val" id="statsAlt">--</span> cm<br>Média DAP: <span class="val" id="statsDap">--</span> dias<br>Talhões: <span class="val" id="statsTalhoes">--</span></div>
+            <button id="btnDashboard" class="btn-floating btn-dashboard" onclick="abrirDashboard()">📊</button>
+            <button id="btnExportarExcel" class="btn-floating btn-exportar-excel" onclick="exportarExcel()">📋 Excel</button>
+            <button id="btnEditar" class="btn-floating btn-editar" onclick="abrirListaPontos()">✏️ Editar</button>
+            <button id="btnGerarPdf" class="btn-floating btn-pdf" onclick="confirmarGerarPDF()">📄 PDF</button>
+            <button class="btn-floating btn-foto" onclick="abrirMedicao()">📸 Registrar</button>
+            <button id="btnGps" class="btn-center-gps" onclick="centralizarGPSVistoria()">
+                <svg class="gps-icon-svg" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2V5M12 19V22M2 12H5M19 12H22" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+        </div>
+        <div class="telemetry-panel">
+            <div class="tele-label"><span class="tele-dot" id="gpsDot"></span>Telemetria GPS</div>
+            <div class="tele-row">
+                <div><div style="margin-bottom:3px;">LAT <span class="tele-val" id="teleLat">--</span></div><div>LON <span class="tele-val" id="teleLng">--</span></div></div>
+                <div style="text-align:right;"><div style="margin-bottom:3px;">VEL <span class="tele-val tele-speed" id="teleVel">0</span> <small>km/h</small></div><div>PREC <span class="tele-val" id="teleAcc">--</span> <small>m</small></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PONTO -->
+    <div id="modalPonto" class="modal">
+        <div class="modal-content">
+            <div class="modal-handle"></div>
+            <h3>📸 Nova Medição</h3>
+            <div class="info-auto" id="infoAutoTalhao" style="display:none;">
+                <div style="font-weight:700; margin-bottom:4px;" id="infoAutoTitle">✅ Dados automáticos</div>
+                <div id="infoAutoTexto"></div>
+            </div>
+            <div class="input-group">
+                <label>📷 Foto Ampla (Visão geral)</label>
+                <div class="foto-upload-row">
+                    <label class="foto-upload-btn foto-cam"><span class="foto-icon">📷</span> Câmera<input type="file" id="inputFotoAmplaCam" accept="image/*" capture="environment" style="display:none;" onchange="processarFoto(event,'ampla')"></label>
+                    <label class="foto-upload-btn foto-gal"><span class="foto-icon">🖼️</span> Galeria<input type="file" id="inputFotoAmplaGal" accept="image/*" style="display:none;" onchange="processarFoto(event,'ampla')"></label>
+                </div>
+                <img id="previewAmpla" class="foto-preview" style="border-color:var(--primary);">
+            </div>
+            <div class="input-group">
+                <label>🔍 Foto Detalhe (Régua)</label>
+                <div class="foto-upload-row">
+                    <label class="foto-upload-btn foto-cam-det"><span class="foto-icon">📷</span> Câmera<input type="file" id="inputFotoDetalheCam" accept="image/*" capture="environment" style="display:none;" onchange="processarFoto(event,'detalhe')"></label>
+                    <label class="foto-upload-btn foto-gal-det"><span class="foto-icon">🖼️</span> Galeria<input type="file" id="inputFotoDetalheGal" accept="image/*" style="display:none;" onchange="processarFoto(event,'detalhe')"></label>
+                </div>
+                <img id="previewDetalhe" class="foto-preview" style="border-color:#e65100;">
+            </div>
+            <div class="input-group">
+                <label>📏 Altura da Cana (cm) — OBRIGATÓRIO</label>
+                <input type="number" id="inputAltura" class="altura-input" placeholder="Ex: 50" inputmode="numeric">
+            </div>
+            <div class="grid-2">
+                <div class="input-group"><label>🌱 Variedade</label><input type="text" id="inputVariedade" class="input-readonly" readonly placeholder="Via planilha..."></div>
+                <div class="input-group"><label>📅 DAP (dias)</label><input type="number" id="inputDap" class="input-readonly" readonly placeholder="Calculado..."></div>
+            </div>
+            <div class="input-group"><label>📝 Observação (opcional)</label><input type="text" id="inputStatus" placeholder="Ex: Falhas, pragas, boa brotação..."></div>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="fecharModal()">Cancelar</button>
+                <button class="btn-save" onclick="salvarPontoAutomatico()">✅ Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTÓRICO -->
+    <div id="modalHistorico" class="modal">
+        <div class="modal-content modal-center">
+            <h3>☁️ Vistorias na Nuvem</h3>
+            <div id="listaHistorico" style="flex:1; overflow-y:auto; max-height:55vh;"><p style="text-align:center; color:var(--text-secondary);">Buscando...</p></div>
+            <button class="btn-cancel" style="width:100%; margin-top:12px;" onclick="fecharHistorico()">Fechar</button>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR -->
+    <div id="modalListaPontos" class="modal">
+        <div class="modal-content">
+            <div class="modal-handle"></div>
+            <h3>✏️ Pontos Coletados</h3>
+            <div id="listaEditarPontos" class="lista-pontos-modal" style="flex:1; overflow-y:auto; max-height:60vh;"></div>
+            <button class="btn-cancel" style="width:100%; margin-top:12px;" onclick="fecharListaPontos()">Fechar</button>
+        </div>
+    </div>
+
+    <!-- MODAL DASHBOARD -->
+    <div id="modalDashboard" class="modal">
+        <div class="modal-content modal-center">
+            <h3>📊 Dashboard</h3>
+            <div id="dashboardContent"></div>
+            <button class="btn-cancel" style="width:100%; margin-top:12px;" onclick="document.getElementById('modalDashboard').style.display='none'">Fechar</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toastMsg"></div>
+    <div class="loading-overlay" id="loadingOverlay"><div class="loading-spinner"></div><div class="loading-text" id="loadingText">Gerando PDF...</div><div class="loading-progress"><div class="loading-progress-bar"></div></div></div>
+
+    <!-- PDF LAYOUT -->
+    <div id="pdfLayout">
+        <div class="pdf-header">
+            <div class="pdf-title">Monitoramento de Cana-Planta</div>
+            <div class="pdf-subtitle" id="pdfMetaSubtitle">Fazenda: -- | Gleba: --</div>
+            <div style="font-size:13px; color:#555; margin-top:8px; font-weight:bold;">👷 Monitor: <span id="pdfMonitorNome" style="color:#1b5e20;">--</span> &nbsp;|&nbsp; 📅 Data: <span id="pdfDataVistoria" style="color:#1b5e20;">--</span></div>
+        </div>
+
+        <div class="pdf-table-title">Mapa de Localização dos Pontos</div>
+        <div class="pdf-map-section">
+            <img id="pdfMapImage" src="" alt="Mapa da Gleba">
+        </div>
+
+        <div class="pdf-table-title">Tabela Geral de Alturas e DAP</div>
+        <table class="pdf-table">
+            <thead><tr>
+                <th style="width:6%; text-align:center;">Pt</th>
+                <th style="width:10%; text-align:center;">Talhão</th>
+                <th style="width:15%;">Variedade</th>
+                <th style="width:8%; text-align:center;">DAP</th>
+                <th style="width:10%; text-align:center;">Altura</th>
+                <th style="width:33%;">Observação</th>
+                <th style="width:18%; text-align:center;">📍 Maps</th>
+            </tr></thead>
+            <tbody id="pdfTbody"></tbody>
+        </table>
+        <div class="pdf-summary-box">
+            <div class="pdf-summary-item">Amostras: <span id="pdfTotalPontos">0</span></div>
+            <div class="pdf-summary-item" style="border-left:2px solid #1b5e20; padding-left:15px;">DAP Médio: <span id="pdfMediaDap" style="color:#f57f17;">0</span></div>
+            <div class="pdf-summary-item" style="border-left:2px solid #1b5e20; padding-left:15px;">Altura Média: <span id="pdfMediaGeral" style="color:#d32f2f;">0 cm</span></div>
+        </div>
+        <div class="pdf-page-break">
+            <div class="pdf-table-title" style="font-size:16px;">Evidências por Ponto</div>
+            <div class="pdf-photos-pairs" id="pdfPhotosPontos"></div>
+        </div>
+    </div>
+
+<script>
+const URL_BANCO_CANA = "https://radar-topomap-default-rtdb.firebaseio.com/historico_cana";
+// ===== Cloudinary — armazenamento de arquivos GRÁTIS (sem cartão/pré-pagamento) =====
+// Preencha com os dados da sua conta Cloudinary (veja instruções que te passei).
+const CLOUDINARY_CLOUD_NAME = "m5k3vumt";
+const CLOUDINARY_UPLOAD_PRESET = "Topomap";
+const DB_VERSION = 3;
+
+// Envia o PDF (data URI ou base64 puro) para o Cloudinary e devolve a URL pública.
+// Se falhar (sem internet, config errada), lança erro e o chamador usa o fallback base64.
+async function uploadPDFCloudinary(base64OuDataUri, nomeArquivo) {
+    const dataUri = String(base64OuDataUri).startsWith('data:')
+        ? base64OuDataUri
+        : `data:application/pdf;base64,${base64OuDataUri}`;
+    const form = new FormData();
+    form.append('file', dataUri);
+    form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    form.append('public_id', String(nomeArquivo || 'relatorio').replace(/\.pdf$/i,'').replace(/[^a-z0-9_-]/gi,'_') + '_' + Date.now());
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error('Cloudinary HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.secure_url) throw new Error('Cloudinary não retornou URL');
+    return data.secure_url;
+}
+
+const dbPromise = new Promise((resolve, reject) => {
+    let req = indexedDB.open("TopoMapDB_Cana_v3", DB_VERSION);
+    req.onupgradeneeded = e => {
+        let db = e.target.result;
+        if (!db.objectStoreNames.contains("mapas_cana")) db.createObjectStore("mapas_cana");
+        if (!db.objectStoreNames.contains("planilha_cana")) db.createObjectStore("planilha_cana");
+        if (!db.objectStoreNames.contains("pontos_backup")) db.createObjectStore("pontos_backup");
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject("Erro DB");
+});
+
+let map = L.map('mapaLivre', { zoomControl: false, preferCanvas: true, attributionControl: false }).setView([-22.3, -53.8], 12);
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 20, crossOrigin: true }).addTo(map);
+
+let layerPoligonos = L.featureGroup().addTo(map);
+let markersPontos = L.featureGroup().addTo(map);
+let bancoMapaDados = [], pontosColetados = [], dadosPlanilha = [];
+let fotoAmplaBase64 = "", fotoDetalheBase64 = "";
+let currentLat = 0, currentLng = 0, markerGPS = null, navAutoCenter = true;
+let modoTeste = false, markerTeste = null;
+
+function esc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function googleMapsUrl(lat, lng) { return `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`; }
+function googleMapsUrlShort(lat, lng) { return `${lat.toFixed(5)},${lng.toFixed(5)}`; }
+
+function showToast(msg, tipo = '', duracao = 3000) {
+    let t = document.getElementById('toastMsg');
+    t.innerText = msg; t.className = 'toast show ' + tipo;
+    clearTimeout(t._timeout);
+    t._timeout = setTimeout(() => { t.className = 'toast'; }, duracao);
+}
+
+function showLoading(txt = 'Processando...') { document.getElementById('loadingText').innerText = txt; document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
+
+function toggleTemaApp() {
+    document.body.classList.toggle('dark-mode');
+    let isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('cana_tema', isDark ? 'dark' : 'light');
+    document.getElementById('btnTemaApp').innerText = isDark ? '☀️' : '🌙';
+}
+
+function voltarParaMenu() {
+    if (window.parent && window.parent !== window) window.parent.postMessage('voltarMenu', '*');
+    else window.history.back();
+}
+
+function updateGpsDot(active) { let d = document.getElementById('gpsDot'); if(active) d.classList.add('active'); else d.classList.remove('active'); }
+
+function toggleModoTeste() {
+    modoTeste = !modoTeste;
+    let btn = document.getElementById('btnModoTeste'), badge = document.getElementById('testeBadge');
+    if (modoTeste) { btn.classList.add('btn-teste-ativo'); badge.style.display = 'block'; showToast('🧪 Modo Teste ATIVO!', 'info', 4000); }
+    else { btn.classList.remove('btn-teste-ativo'); badge.style.display = 'none'; if(markerTeste){map.removeLayer(markerTeste); markerTeste=null;} showToast('Modo Teste desativado', 'info'); }
+}
+
+map.on('click', function(e) {
+    if (!modoTeste) return;
+    atualizarPosicaoTeste(e.latlng.lat, e.latlng.lng);
+});
+
+function atualizarPosicaoTeste(lat, lng) {
+    currentLat = lat;
+    currentLng = lng;
+    if (markerTeste) map.removeLayer(markerTeste);
+    markerTeste = L.circleMarker([lat, lng], {radius:12, color:'#ff3d00', fillColor:'#ff6d00', fillOpacity:0.8, weight:3}).addTo(map);
+    markerTeste.bindPopup(`<b>🧪 Teste</b><br>${lat.toFixed(6)}, ${lng.toFixed(6)}`).openPopup();
+    document.getElementById('teleLat').innerText = lat.toFixed(6);
+    document.getElementById('teleLng').innerText = lng.toFixed(6);
+    updateGpsDot(true);
+    showToast(`📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`, 'success');
+}
+
+map.on('dragstart', () => { navAutoCenter = false; document.getElementById('btnGps').classList.remove('seguindo'); });
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(pos => {
+        if (modoTeste) return;
+        updateGpsDot(true);
+        currentLat = pos.coords.latitude; currentLng = pos.coords.longitude;
+        let acc = pos.coords.accuracy, spd = (pos.coords.speed||0)*3.6, latlng = [currentLat, currentLng];
+        document.getElementById('teleLat').innerText = currentLat.toFixed(6);
+        document.getElementById('teleLng').innerText = currentLng.toFixed(6);
+        document.getElementById('teleVel').innerText = spd.toFixed(0);
+        document.getElementById('teleAcc').innerText = acc.toFixed(0);
+        if (!markerGPS) { markerGPS = L.circleMarker(latlng, {radius:8, color:'#fff', fillColor:'#4285F4', fillOpacity:1, weight:2.5}).addTo(map); if(navAutoCenter) map.setView(latlng, 16); }
+        else { markerGPS.setLatLng(latlng); if(navAutoCenter) map.setView(latlng, map.getZoom()); }
+    }, err => { updateGpsDot(false); }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function centralizarGPSVistoria() {
+    navAutoCenter = true; document.getElementById('btnGps').classList.add('seguindo');
+    if(markerGPS) map.setView(markerGPS.getLatLng(), 17, {animate:true});
+    else if(modoTeste && currentLat) map.setView([currentLat, currentLng], 17, {animate:true});
+}
+
+function toggleSearch() {
+    let bar = document.getElementById('searchBar');
+    let isVisible = bar.style.display === 'block';
+    bar.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) { document.getElementById('searchInput').value = ''; document.getElementById('searchInput').focus(); document.getElementById('searchResults').style.display = 'none'; }
+}
+
+function filtrarBusca(query) {
+    let results = document.getElementById('searchResults');
+    if (!query || query.length < 2) { results.style.display = 'none'; return; }
+    let q = query.toUpperCase();
+    let matches = bancoMapaDados.filter(item => (item.faz&&item.faz.toUpperCase().includes(q))||(item.gleba&&String(item.gleba).toUpperCase().includes(q))||(item.talhao&&String(item.talhao).toUpperCase().includes(q))).slice(0, 8);
+    if (!matches.length) { results.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary)">Nenhum resultado</div>'; results.style.display = 'block'; return; }
+    results.innerHTML = matches.map((item, i) => `<div class="search-result-item" onclick="irParaTalhao(${i})"><b>T${item.talhao}</b> — G${item.gleba} — ${item.faz}</div>`).join('');
+    results.style.display = 'block'; results._matches = matches;
+}
+
+function irParaTalhao(idx) {
+    let results = document.getElementById('searchResults');
+    let item = results._matches[idx]; if(!item) return;
+    try { let g = L.geoJSON({type:"Feature",geometry:item.geom}); if(g.getBounds().isValid()) map.fitBounds(g.getBounds(),{padding:[50,50],maxZoom:17}); } catch(e){}
+    toggleSearch(); showToast(`🗺️ T${item.talhao} — G${item.gleba}`, 'success');
+}
+
+async function carregarMapaSalvo() {
+    let db = await dbPromise;
+    let req = db.transaction("mapas_cana").objectStore("mapas_cana").get("meuMapaCana");
+    req.onsuccess = e => { if (e.target.result) { bancoMapaDados = e.target.result; renderizarPoligonos(); showToast('🗺️ Mapa carregado', 'success'); } };
+}
+
+function renderizarPoligonos() {
+    layerPoligonos.clearLayers();
+    bancoMapaDados.forEach(item => {
+        let poly = L.geoJSON({type:"Feature",geometry:item.geom}, {style:{color:'#42a5f5', weight:1.8, fillOpacity:0.06, fillColor:'#42a5f5'}, smoothFactor:2.0});
+        poly.fazenda = item.faz; poly.gleba = item.gleba; poly.talhao = item.talhao; poly.codFaz = item.cod;
+        poly.bindTooltip(`T${item.talhao}`, {permanent:false, direction:'center', className:'talhao-tooltip'});
+        poly.on('click', function(e) {
+            if (modoTeste) {
+                atualizarPosicaoTeste(e.latlng.lat, e.latlng.lng);
+                return;
+            }
+            let dados = buscarDadosPlanilha(item.cod, item.gleba, item.talhao);
+            let info = `<div style="font-size:13px; line-height:1.6;"><b style="color:#1b5e20; font-size:14px;">Talhão ${item.talhao}</b><br><b>Fazenda:</b> ${item.faz}<br><b>Gleba:</b> ${item.gleba}`;
+            if(dados) info += `<br><b>Var:</b> ${dados.variedade}<br><b>DAP:</b> ${dados.dap} dias<br><b>Área:</b> ${dados.area?dados.area.toFixed(2)+' ha':'--'}`;
+            info += '</div>'; poly.bindPopup(info,{maxWidth:250}).openPopup();
+        });
+        layerPoligonos.addLayer(poly);
+    });
+    if (layerPoligonos.getBounds().isValid()) map.fitBounds(layerPoligonos.getBounds());
+}
+
+function primeiraCoordenada(geometry) { let c=geometry.coordinates; while(Array.isArray(c)&&Array.isArray(c[0])) c=c[0]; return c; }
+function precisaReprojetar(geometry) { let c=primeiraCoordenada(geometry); if(!c||typeof c[0]!=='number') return false; return Math.abs(c[0])>180||Math.abs(c[1])>90; }
+function construirDefProj4DoWKT(wktText) { try { let mC=wktText.match(/Central_Meridian"\s*,\s*(-?\d+\.?\d*)/i); let mN=wktText.match(/False_Northing"\s*,\s*(-?\d+\.?\d*)/i); if(!mC) return null; let cm=parseFloat(mC[1]); let z=Math.round((cm+183)/6); let s=mN?parseFloat(mN[1])>1000000:true; return `+proj=utm +zone=${z}${s?' +south':''} +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`; } catch(e){return null;} }
+async function obterConversorProjecao(file) { const D='+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs'; try { let zip=await JSZip.loadAsync(await file.arrayBuffer()); let prj=Object.values(zip.files).find(f=>f.name.toLowerCase().endsWith('.prj')); let def=D; if(prj){let w=await prj.async('text'); def=construirDefProj4DoWKT(w)||D;} return proj4(def,'WGS84'); } catch(e){return proj4(D,'WGS84');} }
+function reprojetarGeometria(geometry, conversor) { function t(c){if(typeof c[0]==='number'){let[lng,lat]=conversor.forward([c[0],c[1]]); c[0]=lng; c[1]=lat; if(c.length>2) c.length=2; return;} c.forEach(t);} t(geometry.coordinates); }
+
+async function processarZips(event) {
+    const files=event.target.files; if(!files.length) return;
+    showLoading('Processando mapa...'); layerPoligonos.clearLayers(); bancoMapaDados=[];
+    try {
+        for (let f of files) {
+            let geo=await shp(await f.arrayBuffer()); if(Array.isArray(geo)) geo=geo[0];
+            let conversor=null;
+            if(geo.features.length && precisaReprojetar(geo.features[0].geometry)) { showLoading('Convertendo UTM → GPS...'); conversor=await obterConversorProjecao(f); }
+            geo.features.forEach(feat => {
+                if(conversor) reprojetarGeometria(feat.geometry, conversor);
+                let p={}; for(let k in feat.properties) p[k.toUpperCase()]=feat.properties[k];
+                let codFaz=String(p.FAZENDA||p.CODIGO||"").trim(), nomeFaz=String(p.PROPRIEDAD||p.NOME||"").trim(), gleba=String(p.GLEBA||"").trim();
+                let item={cod:codFaz, faz:nomeFaz?`${codFaz} - ${nomeFaz}`:codFaz, gleba:gleba, talhao:String(p.TALHAO||"").trim(), geom:feat.geometry};
+                bancoMapaDados.push(item);
+            });
+        }
+        renderizarPoligonos();
+        let db=await dbPromise; db.transaction("mapas_cana","readwrite").objectStore("mapas_cana").put(bancoMapaDados,"meuMapaCana");
+        hideLoading(); showToast(`✅ ${bancoMapaDados.length} talhões!`, 'success');
+        document.getElementById('headerSubtitle').textContent=`${bancoMapaDados.length} talhões mapeados`;
+    } catch(e){ hideLoading(); showToast('❌ Erro: '+e.message, 'error'); }
+    event.target.value="";
+}
+
+async function importarPlanilha(event) {
+    let file=event.target.files[0]; if(!file) return; showLoading('Importando planilha...');
+    try {
+        let data=await file.arrayBuffer(); let wb=XLSX.read(data,{type:'array',cellDates:true});
+        let ws=null, headerRowIdx=0;
+        for(let sn of wb.SheetNames){ let sheet=wb.Sheets[sn]; let linhas=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false}); for(let i=0;i<Math.min(linhas.length,20);i++){ let norm=linhas[i].map(c=>String(c).replace(':','').trim().toUpperCase()); if(norm.includes('FAZENDA')&&norm.includes('GLEBA')&&(norm.includes('TALHÃO')||norm.includes('TALHAO'))){ws=sheet; headerRowIdx=i; break;} } if(ws) break; }
+        if(!ws){ws=wb.Sheets[wb.SheetNames[0]]; headerRowIdx=0;}
+        let json=XLSX.utils.sheet_to_json(ws,{defval:'',range:headerRowIdx,cellDates:true});
+        let registros=json.map(row=>{let r={}; for(let k in row) r[k.replace(':','').trim().toUpperCase()]=row[k]; let dp=r['DATA_PLANTIO']||r['DATAPLANTIO']||r['DATA PLANTIO']||''; if(dp instanceof Date) dp=dp.toISOString().split('T')[0]; else if(typeof dp==='string') dp=dp.substring(0,10); return{fazenda:String(r['FAZENDA']||'').trim(),gleba:String(r['GLEBA']||'').trim(),talhao:String(r['TALHÃO']||r['TALHAO']||'').trim(),propriedade:String(r['PROPRIEDADE']||r['PROPRIEDAD']||'').trim(),data_plantio:dp,variedade:String(r['VARIEDADE']||'').trim(),area:parseFloat(r['ÁREA_PLANTADA']||r['AREA_PLANTADA']||r['ÁREA_TALHÃO']||r['AREA_TALHAO']||r['AREA']||0)};}).filter(r=>r.fazenda&&r.talhao);
+        let porTalhao={}; registros.forEach(r=>{let c=r.fazenda+'|'+r.gleba+'|'+r.talhao; if(!porTalhao[c]||(r.data_plantio&&r.data_plantio>(porTalhao[c].data_plantio||''))) porTalhao[c]=r;}); dadosPlanilha=Object.values(porTalhao);
+        let db=await dbPromise; db.transaction("planilha_cana","readwrite").objectStore("planilha_cana").put(dadosPlanilha,"dadosCana");
+        hideLoading(); showToast(`✅ ${dadosPlanilha.length} talhões`, 'success');
+    } catch(e){ hideLoading(); showToast('❌ Erro: '+e.message, 'error'); }
+    event.target.value="";
+}
+async function carregarPlanilhaSalva(){ let db=await dbPromise; let req=db.transaction("planilha_cana").objectStore("planilha_cana").get("dadosCana"); req.onsuccess=e=>{if(e.target.result){dadosPlanilha=e.target.result; showToast(`📊 ${dadosPlanilha.length} talhões`,'info');}}; }
+
+function identificarLocalizacaoPorGPS(lat, lng) {
+    let pt=turf.point([lng,lat]), local={faz:"Não Identificada",gleba:"--",talhao:"--",codFaz:""};
+    for(let i=0;i<bancoMapaDados.length;i++){ try{if(turf.booleanPointInPolygon(pt,bancoMapaDados[i].geom)){local.faz=bancoMapaDados[i].faz; local.gleba=bancoMapaDados[i].gleba; local.talhao=bancoMapaDados[i].talhao; local.codFaz=bancoMapaDados[i].cod; break;}}catch(e){} }
+    return local;
+}
+function diagnosticoMapa(lat, lng) {
+    if(!bancoMapaDados.length) return 'Nenhum talhão em memória.';
+    let pt=turf.point([lng,lat]), menorDist=Infinity, mp=null;
+    bancoMapaDados.forEach(item=>{try{let c=turf.centroid({type:'Feature',geometry:item.geom}); let d=turf.distance(pt,c,{units:'meters'}); if(d<menorDist){menorDist=d; mp=item;}}catch(e){}});
+    let txt=`Talhões: ${bancoMapaDados.length}`;
+    if(mp) txt+=`<br>Mais próximo: T${mp.talhao} G${mp.gleba} — ${menorDist.toFixed(0)}m`;
+    return txt;
+}
+function buscarDadosPlanilha(codFaz, gleba, talhao) {
+    if(!dadosPlanilha.length) return null;
+    let r=dadosPlanilha.find(d=>String(d.fazenda)===String(codFaz)&&String(d.gleba)===String(gleba)&&String(d.talhao)===String(talhao));
+    if(r){ let dap=0; if(r.data_plantio){let dp=new Date(r.data_plantio+'T00:00:00'); let h=new Date(); h.setHours(0,0,0,0); dap=Math.floor((h-dp)/86400000);} return{variedade:r.variedade,dap:dap,propriedade:r.propriedade,area:r.area}; }
+    return null;
+}
+
+function abrirMedicao() {
+    document.getElementById('modalPonto').style.display='flex';
+    document.getElementById('inputAltura').value=''; document.getElementById('inputVariedade').value=''; document.getElementById('inputDap').value=''; document.getElementById('inputStatus').value='';
+    ['inputFotoAmplaCam','inputFotoAmplaGal','inputFotoDetalheCam','inputFotoDetalheGal'].forEach(id=>{document.getElementById(id).value='';});
+    document.getElementById('previewAmpla').style.display='none'; document.getElementById('previewDetalhe').style.display='none';
+    fotoAmplaBase64=""; fotoDetalheBase64="";
+    let vI=document.getElementById('inputVariedade'), dI=document.getElementById('inputDap');
+    vI.setAttribute('readonly',''); vI.classList.add('input-readonly');
+    dI.setAttribute('readonly',''); dI.classList.add('input-readonly');
+
+    let infoLocal=identificarLocalizacaoPorGPS(currentLat,currentLng);
+    let infoDiv=document.getElementById('infoAutoTalhao'), infoTexto=document.getElementById('infoAutoTexto'), infoTitle=document.getElementById('infoAutoTitle');
+    if(infoLocal.talhao!=="--"){
+        let dados=buscarDadosPlanilha(infoLocal.codFaz,infoLocal.gleba,infoLocal.talhao);
+        if(dados){ document.getElementById('inputVariedade').value=dados.variedade; document.getElementById('inputDap').value=dados.dap; infoDiv.style.display='block'; infoDiv.className='info-auto success'; infoTitle.innerHTML='✅ Identificação automática'; infoTexto.innerHTML=`<b>Faz:</b> ${infoLocal.faz} | <b>G:</b> ${infoLocal.gleba} | <b>T:</b> ${infoLocal.talhao}<br><b>Var:</b> ${dados.variedade} | <b>DAP:</b> ${dados.dap} dias`; }
+        else { infoDiv.style.display='block'; infoDiv.className='info-auto warning'; infoTitle.innerHTML='⚠️ Sem dados na planilha'; infoTexto.innerHTML=`Talhão <b>${infoLocal.talhao}</b> sem dados. Preencha manualmente.`; vI.removeAttribute('readonly'); vI.classList.remove('input-readonly'); dI.removeAttribute('readonly'); dI.classList.remove('input-readonly'); }
+    } else {
+        infoDiv.style.display='block'; infoDiv.className='info-auto error'; infoTitle.innerHTML='❌ GPS fora do mapa';
+        infoTexto.innerHTML=`Talhão não identificado.<br><small>${diagnosticoMapa(currentLat,currentLng)}</small>`;
+        vI.removeAttribute('readonly'); vI.classList.remove('input-readonly'); dI.removeAttribute('readonly'); dI.classList.remove('input-readonly');
+    }
+    setTimeout(()=>document.getElementById('inputAltura').focus(), 400);
+}
+function fecharModal(){ document.getElementById('modalPonto').style.display='none'; }
+
+// ===== FOTO EM ALTA RESOLUÇÃO =====
+// A foto "detalhe" (régua medindo a altura) recebe resolução e qualidade maiores
+// para que os números/traços da régua fiquem nítidos e legíveis no PDF.
+function processarFoto(event, tipo) {
+    let file=event.target.files[0]; if(!file) return;
+    let reader=new FileReader(); reader.onload=function(e){
+        let img=new Image(); img.onload=function(){
+            let canvas=document.createElement('canvas'), ctx=canvas.getContext('2d');
+            // Detalhe (régua): 2600px @ 0.97  |  Ampla (visão geral): 2000px @ 0.9
+            let MAX_W = (tipo==='detalhe') ? 2600 : 2000;
+            let QUALIDADE = (tipo==='detalhe') ? 0.97 : 0.9;
+            let scale=MAX_W/img.width;
+            if(scale<1){canvas.width=MAX_W; canvas.height=Math.round(img.height*scale);} else{canvas.width=img.width; canvas.height=img.height;}
+            // Renderização de alta qualidade
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img,0,0,canvas.width,canvas.height);
+            let b64=canvas.toDataURL('image/jpeg',QUALIDADE);
+            if(tipo==='ampla'){fotoAmplaBase64=b64; document.getElementById('previewAmpla').src=b64; document.getElementById('previewAmpla').style.display='block';}
+            else{fotoDetalheBase64=b64; document.getElementById('previewDetalhe').src=b64; document.getElementById('previewDetalhe').style.display='block';}
+            showToast(`📷 Foto ${tipo} OK!`,'success',1500);
+        }; img.src=e.target.result;
+    }; reader.readAsDataURL(file);
+}
+
+async function salvarPontoAutomatico() {
+    let alt=parseFloat(document.getElementById('inputAltura').value);
+    let dap=parseInt(document.getElementById('inputDap').value)||0;
+    let variedade=document.getElementById('inputVariedade').value||"--";
+    let status=document.getElementById('inputStatus').value||"--";
+    if(!fotoAmplaBase64||!fotoDetalheBase64){showToast('⚠️ As duas fotos são obrigatórias!','error'); return;}
+    if(isNaN(alt)||alt<=0){showToast('⚠️ Informe a altura!','error'); document.getElementById('inputAltura').focus(); return;}
+
+    let infoLocal=identificarLocalizacaoPorGPS(currentLat,currentLng);
+    let numPonto=pontosColetados.length+1;
+    let ponto={num:numPonto, altura:alt, dap:dap, variedade:variedade, status:status, lat:currentLat, lng:currentLng, fazenda:infoLocal.faz, gleba:infoLocal.gleba, talhao:infoLocal.talhao, fotoAmpla:fotoAmplaBase64, fotoDetalhe:fotoDetalheBase64, timestamp:Date.now()};
+    pontosColetados.push(ponto);
+    let icon=L.divIcon({className:'marker-number', html:numPonto, iconSize:[30,30], iconAnchor:[15,15]});
+    L.marker([currentLat,currentLng],{icon:icon, zIndexOffset:1000}).addTo(markersPontos).bindPopup(`<b>#${numPonto}</b><br>T${infoLocal.talhao} — ${alt}cm<br>${variedade}<br><a href="${googleMapsUrl(currentLat,currentLng)}" target="_blank" style="color:#1a73e8;">📍 Abrir no Maps</a>`);
+    fecharModal(); atualizarUI(); await salvarBackupPontos();
+    showToast(`✅ Ponto #${numPonto} — ${alt}cm — ${variedade}`, 'success');
+}
+
+async function salvarBackupPontos(){ try{let db=await dbPromise; db.transaction("pontos_backup","readwrite").objectStore("pontos_backup").put(pontosColetados,"backup_atual");}catch(e){} }
+async function carregarBackupPontos(){
+    try{let db=await dbPromise; let req=db.transaction("pontos_backup").objectStore("pontos_backup").get("backup_atual");
+    req.onsuccess=e=>{if(e.target.result&&e.target.result.length>0){let bk=e.target.result;
+        if(confirm(`Encontrados ${bk.length} pontos não salvos. Restaurar?`)){pontosColetados=bk;
+            pontosColetados.forEach(p=>{let ic=L.divIcon({className:'marker-number',html:p.num,iconSize:[30,30],iconAnchor:[15,15]}); L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:1000}).addTo(markersPontos);});
+            atualizarUI(); showToast(`🔄 ${bk.length} pontos restaurados!`,'success');
+        }
+    }};}catch(e){}
+}
+
+function atualizarUI() {
+    let n=pontosColetados.length;
+    document.getElementById('counterBadge').style.display=n>0?'block':'none';
+    document.getElementById('statsBadge').style.display=n>0?'block':'none';
+    document.getElementById('btnGerarPdf').style.display=n>0?'flex':'none';
+    document.getElementById('btnEditar').style.display=n>0?'flex':'none';
+    document.getElementById('btnExportarExcel').style.display=n>0?'flex':'none';
+    document.getElementById('btnDashboard').style.display=n>0?'flex':'none';
+    document.getElementById('counterNum').innerText=n;
+    if(n>0){let sA=0,sD=0,talhoes=new Set(); pontosColetados.forEach(p=>{sA+=p.altura; sD+=p.dap; if(p.talhao!=='--') talhoes.add(p.talhao);});
+        document.getElementById('statsAlt').innerText=(sA/n).toFixed(1); document.getElementById('statsDap').innerText=Math.round(sD/n); document.getElementById('statsTalhoes').innerText=talhoes.size;}
+    document.getElementById('headerSubtitle').textContent=n>0?`${n} ponto${n>1?'s':''} coletado${n>1?'s':''}` : 'Monitoramento de campo';
+}
+
+function abrirListaPontos(){document.getElementById('modalListaPontos').style.display='flex'; renderListaPontos();}
+function fecharListaPontos(){document.getElementById('modalListaPontos').style.display='none';}
+function renderListaPontos(){
+    let div=document.getElementById('listaEditarPontos');
+    if(!pontosColetados.length){div.innerHTML='<p style="text-align:center; color:var(--text-secondary);">Nenhum ponto.</p>'; return;}
+    div.innerHTML='';
+    pontosColetados.forEach((p,idx)=>{
+        div.innerHTML+=`<div class="ponto-item"><div class="ponto-actions"><button class="btn-locate" onclick="localizarPonto(${idx})">📍</button><button class="btn-del" onclick="excluirPonto(${idx})">🗑️</button></div><div class="ponto-num">#${p.num} — T${p.talhao}</div><div class="ponto-info">📏 <b>${p.altura}cm</b> | 📅 DAP: <b>${p.dap}</b> | 🌱 ${p.variedade}${p.status!=='--'?'<br>📝 '+p.status:''}<br><a href="${googleMapsUrl(p.lat,p.lng)}" target="_blank" style="color:#1a73e8; font-size:11px;">📍 Ver no Google Maps</a></div><div class="fotos-preview">${p.fotoAmpla?`<img src="${p.fotoAmpla}">`:''}${p.fotoDetalhe?`<img src="${p.fotoDetalhe}">`:''}</div></div>`;
+    });
+}
+function localizarPonto(idx){let p=pontosColetados[idx]; map.setView([p.lat,p.lng],18,{animate:true}); fecharListaPontos(); showToast(`📍 Ponto #${p.num}`,'info');}
+function excluirPonto(idx){
+    if(!confirm(`Excluir ponto #${pontosColetados[idx].num}?`)) return;
+    pontosColetados.splice(idx,1); pontosColetados.forEach((p,i)=>p.num=i+1); markersPontos.clearLayers();
+    pontosColetados.forEach(p=>{let ic=L.divIcon({className:'marker-number',html:p.num,iconSize:[30,30],iconAnchor:[15,15]}); L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:1000}).addTo(markersPontos);});
+    atualizarUI(); renderListaPontos(); salvarBackupPontos(); showToast('🗑️ Excluído','info');
+}
+
+function abrirDashboard(){
+    if(!pontosColetados.length) return; document.getElementById('modalDashboard').style.display='flex';
+    let n=pontosColetados.length, sA=0, sD=0, minA=Infinity, maxA=0, porTalhao={}, porVariedade={};
+    pontosColetados.forEach(p=>{sA+=p.altura; sD+=p.dap; if(p.altura<minA) minA=p.altura; if(p.altura>maxA) maxA=p.altura;
+        let t=p.talhao!=='--'?'T'+p.talhao:'N/A'; if(!porTalhao[t]) porTalhao[t]={soma:0,count:0}; porTalhao[t].soma+=p.altura; porTalhao[t].count++;
+        let v=p.variedade!=='--'?p.variedade:'N/A'; if(!porVariedade[v]) porVariedade[v]=0; porVariedade[v]++;});
+    let html=`<div class="dashboard-grid"><div class="dash-card"><div class="dash-value">${n}</div><div class="dash-label">Amostras</div></div><div class="dash-card accent"><div class="dash-value">${Math.round(sD/n)}</div><div class="dash-label">DAP Médio</div></div><div class="dash-card"><div class="dash-value">${(sA/n).toFixed(1)}</div><div class="dash-label">Alt. Média</div></div><div class="dash-card info"><div class="dash-value">${Object.keys(porTalhao).length}</div><div class="dash-label">Talhões</div></div><div class="dash-card"><div class="dash-value">${minA}</div><div class="dash-label">Alt. Mínima</div></div><div class="dash-card danger"><div class="dash-value">${maxA}</div><div class="dash-label">Alt. Máxima</div></div></div>`;
+    let entries=Object.entries(porTalhao).sort((a,b)=>b[1].soma/b[1].count-a[1].soma/a[1].count);
+    if(entries.length>1){html+=`<div style="font-weight:700;font-size:12px;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px;">Altura Média por Talhão</div><div class="dash-bar-chart">`;
+        let maxM=Math.max(...entries.map(e=>e[1].soma/e[1].count));
+        entries.slice(0,10).forEach(([t,d])=>{let m=(d.soma/d.count).toFixed(1); let pct=(m/maxM*100).toFixed(0); html+=`<div class="dash-bar-row"><div class="dash-bar-label">${t}</div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%">${m}</div></div></div>`;});
+        html+='</div>';}
+    let varE=Object.entries(porVariedade).sort((a,b)=>b[1]-a[1]);
+    if(varE.length>0){html+=`<div style="font-weight:700;font-size:12px;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px;">Variedades</div><div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+        varE.forEach(([v,c])=>{html+=`<span style="background:var(--bg);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">${v} <span style="color:var(--primary);margin-left:2px;">(${c})</span></span>`;});
+        html+='</div>';}
+    document.getElementById('dashboardContent').innerHTML=html;
+}
+
+function exportarExcel(){
+    if(!pontosColetados.length) return;
+    let dados=pontosColetados.map(p=>({'Ponto':p.num,'Fazenda':p.fazenda,'Gleba':p.gleba,'Talhão':p.talhao,'Variedade':p.variedade,'DAP (dias)':p.dap,'Altura (cm)':p.altura,'Observação':p.status,'Latitude':p.lat.toFixed(6),'Longitude':p.lng.toFixed(6),'Google Maps':googleMapsUrl(p.lat,p.lng),'Data/Hora':new Date(p.timestamp||Date.now()).toLocaleString('pt-BR')}));
+    let ws=XLSX.utils.json_to_sheet(dados); let wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Monitoramento");
+    let colW=Object.keys(dados[0]).map(k=>({wch:Math.max(k.length,...dados.map(r=>String(r[k]).length))+2})); ws['!cols']=colW;
+    XLSX.writeFile(wb,`Monitoramento_Cana_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast('📋 Excel exportado!','success');
+}
+
+async function abrirHistoricoNuvem(){
+    document.getElementById('modalHistorico').style.display='flex';
+    let div=document.getElementById('listaHistorico'); div.innerHTML='<p style="text-align:center;color:var(--primary);font-weight:bold;">🔄 Buscando...</p>';
+    try{let res=await fetch(URL_BANCO_CANA+".json?t="+Date.now()); let dados=await res.json(); div.innerHTML='';
+        if(!dados){div.innerHTML='<p style="text-align:center;color:var(--text-secondary);">Nenhuma vistoria.</p>'; return;}
+        let arr=Object.keys(dados).map(k=>({...dados[k],idF:k})).sort((a,b)=>b.timestamp-a.timestamp);
+        arr.slice(0,20).forEach(d=>{let tagT=d.teste?' <span style="background:#ede7f6;color:#5e35b1;font-size:10px;font-weight:bold;padding:1px 6px;border-radius:10px;">🧪 TESTE</span>':''; div.innerHTML+=`<div class="historico-item"><div class="hist-date">📅 ${esc(d.data)} às ${esc(d.hora)}${tagT}</div><b>Faz:</b> ${esc(d.fazenda)} | <b>Gleba:</b> ${esc(d.gleba)}<br><b>Pts:</b> ${esc(d.qtdPontos)} | <b>DAP:</b> ${esc(d.mediaDap)} | <b>Alt:</b> ${esc(d.mediaAltura)} cm<br><span style="color:var(--text-secondary);font-size:11px;">👷 ${esc(d.topografo)||"--"}</span></div>`;});
+    }catch(e){div.innerHTML='<p style="text-align:center;color:var(--danger);">❌ Sem internet.</p>';}
+}
+function fecharHistorico(){document.getElementById('modalHistorico').style.display='none';}
+
+// ==========================================================
+// ===== GERAR IMAGEM DO MAPA PARA O PDF (v7.0) =====
+// ==========================================================
+function gerarImagemMapaPDF() {
+    return new Promise((resolve) => {
+        if (!pontosColetados.length) { resolve(null); return; }
+
+        let talhoesComPontos = new Map();
+        let glebasDosPontos = new Set();
+
+        pontosColetados.forEach(p => {
+            try {
+                let pt = turf.point([p.lng, p.lat]);
+                for (let item of bancoMapaDados) {
+                    try {
+                        if (turf.booleanPointInPolygon(pt, item.geom)) {
+                            let chaveTalhao = `${item.cod}|${item.gleba}|${item.talhao}`;
+                            let chaveGleba = `${item.cod}|${item.gleba}`;
+                            if (!talhoesComPontos.has(chaveTalhao)) talhoesComPontos.set(chaveTalhao, item);
+                            glebasDosPontos.add(chaveGleba);
+                            break;
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) {}
+        });
+
+        if (!glebasDosPontos.size && bancoMapaDados.length) {
+            pontosColetados.forEach(p => {
+                try {
+                    let pt = turf.point([p.lng, p.lat]);
+                    let menorDist = Infinity, maisProx = null;
+                    bancoMapaDados.forEach(item => {
+                        try {
+                            let centro = turf.centroid({ type: 'Feature', geometry: item.geom });
+                            let d = turf.distance(pt, centro, { units: 'meters' });
+                            if (d < menorDist && d < 1000) { menorDist = d; maisProx = item; }
+                        } catch(e) {}
+                    });
+                    if (maisProx) {
+                        talhoesComPontos.set(`${maisProx.cod}|${maisProx.gleba}|${maisProx.talhao}`, maisProx);
+                        glebasDosPontos.add(`${maisProx.cod}|${maisProx.gleba}`);
+                    }
+                } catch(e) {}
+            });
+        }
+
+        let poligonosDaGleba = bancoMapaDados.filter(item => glebasDosPontos.has(`${item.cod}|${item.gleba}`));
+        if (!poligonosDaGleba.length) { resolve(null); return; }
+
+        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+        poligonosDaGleba.forEach(item => {
+            try {
+                let bbox = turf.bbox({ type: 'Feature', geometry: item.geom });
+                minLng = Math.min(minLng, bbox[0]); minLat = Math.min(minLat, bbox[1]);
+                maxLng = Math.max(maxLng, bbox[2]); maxLat = Math.max(maxLat, bbox[3]);
+            } catch(e) {}
+        });
+        pontosColetados.forEach(p => {
+            minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+            minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng);
+        });
+
+        let latRange = maxLat - minLat || 0.001;
+        let lngRange = maxLng - minLng || 0.001;
+        let latPad = Math.max(latRange * 0.06, 0.0003);
+        let lngPad = Math.max(lngRange * 0.06, 0.0003);
+        minLat -= latPad; maxLat += latPad;
+        minLng -= lngPad; maxLng += lngPad;
+
+        let W = 760, H = 500;
+        let mapAspect = W / H;
+        let dataAspect = (maxLng - minLng) / (maxLat - minLat);
+        if (dataAspect > mapAspect) {
+            let need = ((maxLng - minLng) / mapAspect - (maxLat - minLat)) / 2;
+            minLat -= need; maxLat += need;
+        } else {
+            let need = ((maxLat - minLat) * mapAspect - (maxLng - minLng)) / 2;
+            minLng -= need; maxLng += need;
+        }
+
+        let canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        let ctx = canvas.getContext('2d');
+
+        function toX(lng) { return ((lng - minLng) / (maxLng - minLng)) * W; }
+        function toY(lat) { return H - ((lat - minLat) / (maxLat - minLat)) * H; }
+
+        desenharCamadas(ctx, W, H, poligonosDaGleba, talhoesComPontos, pontosColetados, toX, toY, minLat, maxLat, minLng, maxLng);
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
+    });
+}
+
+function desenharCamadas(ctx, W, H, poligonos, talhoesComPontos, pontos, toX, toY, minLat, maxLat, minLng, maxLng) {
+    // Fundo branco
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    // Polígonos (fundo bem clarinho + borda verde escura)
+    poligonos.forEach(item => {
+        try {
+            let coords = extrairCoordenadas(item.geom);
+            coords.forEach(ring => {
+                if (ring.length < 3) return;
+                ctx.beginPath();
+                ctx.moveTo(toX(ring[0][0]), toY(ring[0][1]));
+                ring.forEach(c => ctx.lineTo(toX(c[0]), toY(c[1])));
+                ctx.closePath();
+                ctx.fillStyle = '#f5faf5';
+                ctx.fill();
+                ctx.strokeStyle = '#1b5e20';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            });
+        } catch(e) {}
+    });
+
+    // Números pequenos, PRETOS, bem centralizados (usando pointOnFeature — sempre dentro)
+    poligonos.forEach(item => {
+        try {
+            let ponto;
+            try {
+                ponto = turf.pointOnFeature({ type: 'Feature', geometry: item.geom });
+            } catch(e) {
+                ponto = turf.centroid({ type: 'Feature', geometry: item.geom });
+            }
+            let cx = toX(ponto.geometry.coordinates[0]);
+            let cy = toY(ponto.geometry.coordinates[1]);
+            if (cx < 0 || cx > W || cy < 0 || cy > H) return;
+            
+            let label = String(item.talhao);
+            ctx.font = 'bold 6.5px Arial';
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, cx, cy);
+        } catch(e) {}
+    });
+
+    // Pins pequenos
+    pontos.forEach(p => {
+        let x = toX(p.lng), y = toY(p.lat);
+        desenharPin(ctx, x, y);
+    });
+
+    // Borda do mapa
+    ctx.strokeStyle = '#1b5e20';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, W, H);
+
+    // Rosa dos ventos
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b5e20';
+    ctx.lineWidth = 1.2;
+    roundRect(ctx, 10, 10, 32, 40, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(26, 15);
+    ctx.lineTo(21, 28);
+    ctx.lineTo(26, 25);
+    ctx.lineTo(31, 28);
+    ctx.closePath();
+    ctx.fillStyle = '#c62828';
+    ctx.fill();
+    ctx.fillStyle = '#1b5e20';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', 26, 42);
+
+    // Escala
+    let escalaTexto = calcularEscala(minLat, maxLat, minLng, maxLng, W);
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b5e20';
+    ctx.lineWidth = 1;
+    roundRect(ctx, 10, H - 28, 95, 20, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1b5e20';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`≈ ${escalaTexto}`, 16, H - 18);
+    ctx.fillStyle = '#1b5e20';
+    ctx.fillRect(68, H - 20, 30, 3);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(68, H - 20, 15, 3);
+    ctx.strokeStyle = '#1b5e20';
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(68, H - 20, 30, 3);
+}
+
+// Pin pequeno
+function desenharPin(ctx, x, y) {
+    ctx.beginPath();
+    ctx.ellipse(x, y + 1, 2.2, 0.9, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fill();
+    let pinCenter = y - 7;
+    let pinRadius = 4;
+    ctx.beginPath();
+    ctx.arc(x, pinCenter, pinRadius, Math.PI, 0, false);
+    ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fillStyle = '#e53935';
+    ctx.fill();
+    ctx.strokeStyle = '#8b0000';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, pinCenter, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+}
+
+function calcularEscala(minLat, maxLat, minLng, maxLng, w) {
+    let centerLat = (minLat + maxLat) / 2;
+    let metrosPerLng = 111320 * Math.cos(centerLat * Math.PI / 180);
+    let totalMetros = (maxLng - minLng) * metrosPerLng;
+    let escala = totalMetros / 6;
+    if (escala > 1000) return (escala / 1000).toFixed(1) + ' km';
+    return Math.round(escala) + ' m';
+}
+
+function extrairCoordenadas(geometry) {
+    let result = [];
+    if (geometry.type === 'Polygon') result = geometry.coordinates;
+    else if (geometry.type === 'MultiPolygon') geometry.coordinates.forEach(poly => { result = result.concat(poly); });
+    return result;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function confirmarGerarPDF(){
+    if(!pontosColetados.length) return;
+    let aviso = modoTeste ? '\n\n🧪 MODO TESTE ativo: a vistoria será marcada como TESTE.' : '';
+    if(!confirm(`Gerar PDF com ${pontosColetados.length} ponto(s)?\nOs pontos só serão limpos após confirmar o salvamento na nuvem.${aviso}`)) return;
+    prepararPDF();
+}
+
+async function prepararPDF() {
+    if(!pontosColetados.length) return;
+    let ultimoNome=localStorage.getItem('monitor_cana')||"";
+    let nomeMonitor=prompt("👷 Nome do Monitor:", ultimoNome);
+    if(nomeMonitor===null) return;
+    let nomeFinal=nomeMonitor.trim()||"Não informado";
+    if(nomeFinal!=="Não informado") localStorage.setItem('monitor_cana', nomeFinal);
+
+    showLoading('Gerando mapa da gleba...');
+    let mapImageB64 = await gerarImagemMapaPDF();
+    if (mapImageB64) {
+        document.getElementById('pdfMapImage').src = mapImageB64;
+        document.getElementById('pdfMapImage').style.display = 'block';
+    } else {
+        document.getElementById('pdfMapImage').style.display = 'none';
+    }
+
+    showLoading('Montando relatório...');
+    let dataAtual = new Date();
+    document.getElementById('pdfMonitorNome').innerText = nomeFinal;
+    document.getElementById('pdfDataVistoria').innerText = dataAtual.toLocaleDateString('pt-BR');
+    document.body.classList.add('printing');
+
+    let refPoint = pontosColetados[0];
+    for (let p of pontosColetados) { if(p.fazenda!=="Não Identificada"&&p.fazenda!=="--"){refPoint=p; break;} }
+    document.getElementById('pdfMetaSubtitle').innerText = `Fazenda: ${refPoint.fazenda} | Gleba: ${refPoint.gleba}`;
+
+    let pontosGrid = document.getElementById('pdfPhotosPontos'); pontosGrid.innerHTML = '';
+    let tbody = document.getElementById('pdfTbody'); tbody.innerHTML = '';
+    let sA=0, sD=0;
+
+    pontosColetados.forEach(p => {
+        sA += p.altura; sD += p.dap;
+        let t = p.talhao === "--" ? "--" : p.talhao;
+        let mapsLink = googleMapsUrl(p.lat, p.lng);
+        let coordText = googleMapsUrlShort(p.lat, p.lng);
+
+        tbody.innerHTML += `<tr>
+            <td style="text-align:center;"><b>#${p.num}</b></td>
+            <td style="text-align:center;">${t==='--'?'--':'T'+esc(t)}</td>
+            <td>${esc(p.variedade)}</td>
+            <td style="text-align:center;">${esc(p.dap)}</td>
+            <td style="text-align:center; font-weight:bold; color:#1b5e20;">${esc(p.altura)} cm</td>
+            <td class="wrap-text">${esc(p.status)}</td>
+            <td style="text-align:center;"><a href="${mapsLink}" target="_blank" style="color:#1a73e8; text-decoration:none; font-size:10px;">📍 ${coordText}</a></td>
+        </tr>`;
+
+        pontosGrid.innerHTML += `<div class="pdf-photo-pair">
+            <div class="pdf-photo-pair-title">Ponto #${p.num} — Talhão ${esc(t)} — ${esc(p.variedade)} — ${esc(p.altura)}cm</div>
+            <div class="pdf-photo-pair-imgs">
+                <div class="pdf-photo-card"><div class="pdf-photo-cap">📷 Visão geral</div><img src="${p.fotoAmpla}"></div>
+                <div class="pdf-photo-card detalhe"><div class="pdf-photo-cap">📏 Detalhe da régua — ${esc(p.altura)} cm</div><img src="${p.fotoDetalhe}"></div>
+            </div>
+            <div class="pdf-photo-location">📍 <a href="${mapsLink}" target="_blank">Abrir localização no Google Maps (${coordText})</a></div>
+        </div>`;
+    });
+
+    let mediaAlt=(sA/pontosColetados.length).toFixed(1), mediaDap=Math.round(sD/pontosColetados.length);
+    document.getElementById('pdfTotalPontos').innerText=pontosColetados.length;
+    document.getElementById('pdfMediaDap').innerText=mediaDap;
+    document.getElementById('pdfMediaGeral').innerText=mediaAlt+' cm';
+
+    showLoading('Renderizando PDF em alta qualidade...');
+    setTimeout(() => {
+        let el=document.getElementById('pdfLayout');
+        let nomeArquivo=`Monitoramento_${refPoint.fazenda.replace(/[^a-zA-Z0-9]/g,'_')}_${dataAtual.toISOString().split('T')[0]}.pdf`;
+        // Configurações de MÁXIMA QUALIDADE
+        let opts={
+            margin:[10,0,10,0], 
+            filename:nomeArquivo, 
+            image:{type:'jpeg', quality:1.0},  // qualidade máxima
+            html2canvas:{
+                scale:3,                        // escala 3x (era 2x) — mais nitidez
+                useCORS:true, 
+                logging:false, 
+                windowWidth:800,
+                imageTimeout:0,
+                letterRendering:true
+            }, 
+            jsPDF:{
+                unit:'mm', 
+                format:'a4', 
+                orientation:'portrait',
+                compress:true,
+                precision:16
+            }
+        };
+
+        let worker = html2pdf().set(opts).from(el);
+        // Gera o PDF uma vez e obtém tanto o Blob (para o Storage) quanto o base64 (fallback / download local)
+        worker.outputPdf('blob').then(async function(pdfBlob){
+            let pdf64 = await new Promise(r => { let fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(pdfBlob); });
+
+            // Restaura a tela ANTES das operações de rede (o usuário já vê o app de volta)
+            document.body.classList.remove('printing');
+
+            // Baixa o PDF localmente de imediato (garante que o operador sempre tenha o arquivo)
+            let link=document.createElement('a'); link.href=pdf64; link.download=opts.filename; link.click();
+
+            // Monta o registro para a nuvem
+            let payload={
+                titulo:"Monitoramento Cana-Planta",
+                fazenda:refPoint.fazenda, gleba:refPoint.gleba, topografo:nomeFinal,
+                data:dataAtual.toLocaleDateString('pt-BR'), hora:dataAtual.toLocaleTimeString('pt-BR'),
+                qtdPontos:pontosColetados.length, mediaDap:mediaDap, mediaAltura:mediaAlt,
+                teste: modoTeste,                 // #7 marca a vistoria como teste quando o Modo Teste está ativo
+                timestamp:Date.now()
+            };
+
+            // #8 Sobe o PDF para o Cloudinary e salva só o link (leve/barato).
+            showLoading('Salvando na nuvem...');
+            let salvouNuvem = false;
+            let diag = '';
+            try {
+                try {
+                    payload.pdfUrl = await uploadPDFCloudinary(pdf64, opts.filename);  // caminho ideal (só o link)
+                } catch(errUp) {
+                    diag = 'Cloudinary falhou (' + (errUp && errUp.message || errUp) + ')';
+                    console.warn('[Salvar] Falha no Cloudinary:', errUp);
+                    let b64 = pdf64.split(',')[1];
+                    // PDF muito grande não cabe no Realtime Database — evita tentativa que sempre falha
+                    if (b64.length > 8 * 1024 * 1024) {
+                        throw new Error('PDF de ' + (pdfBlob.size/1048576).toFixed(1) + ' MB é grande demais para o banco. Verifique a config do Cloudinary.');
+                    }
+                    payload.arquivoPDF = b64;                                          // fallback: base64 no banco (só p/ PDFs pequenos)
+                }
+                let resDb = await fetch(URL_BANCO_CANA+".json",{method:'POST',body:JSON.stringify(payload)});
+                salvouNuvem = resDb.ok;
+                if (!resDb.ok) diag += (diag?' | ':'') + 'Banco HTTP ' + resDb.status;
+            } catch(e){
+                salvouNuvem = false;
+                diag += (diag?' | ':'') + (e && e.message || e);
+                console.error('[Salvar] Erro:', e);
+            }
+
+            hideLoading();
+
+            if (salvouNuvem) {
+                // Só limpa os pontos DEPOIS de confirmar que salvou na nuvem (#6 evita perder a vistoria)
+                markersPontos.clearLayers(); pontosColetados=[]; atualizarUI();
+                try{let db=await dbPromise; db.transaction("pontos_backup","readwrite").objectStore("pontos_backup").delete("backup_atual");}catch(e){}
+                if(markerGPS) map.setView(markerGPS.getLatLng(),16);
+                showToast(modoTeste ? '🧪 PDF gerado! Vistoria salva como TESTE.' : '✅ PDF gerado e salvo na nuvem!','success',4000);
+            } else {
+                // Mantém os pontos para o operador tentar de novo
+                console.error('[Salvar] Motivo da falha:', diag);
+                showToast('⚠️ PDF baixado, mas FALHOU ao salvar na nuvem. Pontos mantidos.\nMotivo: ' + diag, 'error', 9000);
+            }
+        }).catch(function(err){
+            document.body.classList.remove('printing');
+            hideLoading();
+            showToast('❌ Erro ao gerar o PDF: '+(err&&err.message||err),'error',6000);
+        });
+    }, 500);
+}
+
+window.onload = function(){
+    carregarMapaSalvo(); carregarPlanilhaSalva();
+    if(localStorage.getItem('cana_tema')==='dark') toggleTemaApp();
+    setTimeout(()=>carregarBackupPontos(), 1500);
+};
+
+window.addEventListener('message', e=>{ if(e.data==='voltarMenu') voltarParaMenu(); });
+
+['modalPonto','modalHistorico','modalListaPontos','modalDashboard'].forEach(id=>{
+    document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+});
+
+document.addEventListener('click', function(e){
+    let sb=document.getElementById('searchBar');
+    if(sb.style.display==='block' && !sb.contains(e.target) && e.target.id!=='btnSearch') sb.style.display='none';
+});
+</script>
+</body>
+</html>

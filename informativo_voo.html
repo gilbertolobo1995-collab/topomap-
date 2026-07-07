@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aviso de Voo - TopoMap</title>
+    
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 15px; padding-bottom: 80px; background-color: #f4f6f8; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        h2 { text-align: center; color: #4CAF50; margin-top: 0; font-size: 22px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        label { font-weight: bold; display: block; margin-top: 15px; color: #444; font-size: 14px; }
+        input, select { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; font-family: inherit; background-color: #fff; }
+        input:disabled { background-color: #f0f0f0; color: #555; }
+        
+        .row { display: flex; gap: 10px; }
+        .row > div { flex: 1; }
+
+        .box-import { background: #e8f0fe; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: none; }
+        .box-import label { color: #1565c0; margin-top: 0; }
+        .box-import input { background: white; }
+
+        .area-card { background: #fafafa; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-top: 15px; position: relative; }
+        .btn-remover { background: #ff4d4d; color: white; border: none; padding: 8px; width: 100%; font-size: 14px; border-radius: 6px; margin-top: 15px; cursor: pointer; font-weight: bold; }
+        
+        .btn-add { background: #e0e0e0; color: #333; border: 1px dashed #999; padding: 12px; width: 100%; font-size: 15px; border-radius: 8px; margin-top: 15px; font-weight: bold; cursor: pointer; }
+        .btn-add:active { background: #d0d0d0; }
+
+        .btn-copiar { background: #66bb6a; color: white; border: none; padding: 16px; width: 100%; font-size: 16px; border-radius: 8px; margin-top: 25px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; }
+        .btn-copiar:active { background: #4caf50; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🚁 Informativo de Voo</h2>
+    
+    <div class="box-import" id="boxImportarMapa">
+        <label>⚙️ Importar Banco de Fazendas (.ZIP)</label>
+        <input type="file" id="zipFile" accept=".zip" onchange="importarBancoDeDados()">
+        <small style="color: #555; display: block; margin-top: 5px;">Carregue o ZIP para liberar a lista de áreas automáticas.</small>
+    </div>
+
+    <div class="row">
+        <div>
+            <label>Saudação:</label>
+            <select id="saudacao">
+                <option value="Bom dia">Bom dia</option>
+                <option value="Boa tarde">Boa tarde</option>
+                <option value="Boa noite">Boa noite</option>
+            </select>
+        </div>
+        <div>
+            <label>Data:</label>
+            <input type="text" id="dataVoo" placeholder="DD/MM/AAAA">
+        </div>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+    <h3 style="text-align: center; color: #555; margin-top: 0; font-size: 16px;">LOCAIS DE VOO</h3>
+
+    <div id="listaAreas"></div>
+
+    <button class="btn-add" onclick="adicionarNovaArea()">➕ Adicionar Área de Voo</button>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+    <div class="row">
+        <div>
+            <label>Altura do Voo (m):</label>
+            <input type="number" id="alturaVoo" value="100">
+        </div>
+        <div>
+            <label>Buffer (m):</label>
+            <input type="number" id="bufferVoo" value="100">
+        </div>
+    </div>
+
+    <button class="btn-copiar" id="btnCopiar" onclick="copiarMensagem()">
+        📱 Copiar Aviso para WhatsApp
+    </button>
+</div>
+
+<script>
+    let contadorAreas = 0;
+    let bancoCache = {};
+
+    window.onload = function() {
+        let hoje = new Date();
+        let dia = String(hoje.getDate()).padStart(2, '0');
+        let mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        document.getElementById('dataVoo').value = `${dia}/${mes}/${hoje.getFullYear()}`;
+
+        let hora = hoje.getHours();
+        if (hora >= 12 && hora < 18) document.getElementById('saudacao').value = "Boa tarde";
+        else if (hora >= 18) document.getElementById('saudacao').value = "Boa noite";
+
+        let bancoStr = localStorage.getItem('topo_banco_fazendas_v2');
+        if(!bancoStr) {
+            document.getElementById('boxImportarMapa').style.display = 'block';
+        } else {
+            bancoCache = JSON.parse(bancoStr);
+            adicionarNovaArea();
+        }
+    }
+
+    async function importarBancoDeDados() {
+        const zipFile = document.getElementById('zipFile').files[0];
+        if (!zipFile) return;
+
+        try {
+            const zipBuffer = await zipFile.arrayBuffer();
+            let geojson = await shp(zipBuffer);
+            if (Array.isArray(geojson)) geojson = geojson[0];
+
+            let banco = {};
+            geojson.features.forEach(f => {
+                let p = {};
+                for (let k in f.properties) p[k.toUpperCase()] = f.properties[k];
+
+                let cod = String(p["FAZENDA"] || "").trim();
+                let nome = String(p["PROPRIEDAD"] || "AREA").trim();
+                let gleba = String(p["GLEBA"] || "").trim();
+
+                if(cod !== "") {
+                    if(!banco[cod]) banco[cod] = { nome: nome, glebas: new Set() };
+                    if(gleba !== "") banco[cod].glebas.add(gleba);
+                }
+            });
+
+            for(let cod in banco) {
+                banco[cod].glebas = Array.from(banco[cod].glebas).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+            }
+
+            localStorage.setItem('topo_banco_fazendas_v2', JSON.stringify(banco));
+            bancoCache = banco;
+            
+            alert("✅ Banco de Fazendas importado!");
+            document.getElementById('boxImportarMapa').style.display = 'none';
+            
+            if(contadorAreas === 0) adicionarNovaArea();
+
+        } catch (e) {
+            alert("Erro ao ler ZIP do Mapa!");
+        }
+    }
+
+    function gerarOptionsFazendas() {
+        let options = '';
+        let codigos = Object.keys(bancoCache).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+        codigos.forEach(c => {
+            options += `<option value="${c}">${c} - ${bancoCache[c].nome}</option>`;
+        });
+        return options;
+    }
+
+    function adicionarNovaArea() {
+        contadorAreas++;
+        let div = document.createElement('div');
+        div.className = 'area-card';
+        div.id = `bloco_${contadorAreas}`;
+
+        div.innerHTML = `
+            <div class="row">
+                <div>
+                    <label style="margin-top:0;">Código:</label>
+                    <select class="sel-cod" onchange="atualizarGlebaArea(${contadorAreas})">
+                        <option value="">Selecione...</option>
+                        ${gerarOptionsFazendas()}
+                    </select>
+                </div>
+                <div>
+                    <label style="margin-top:0;">Gleba:</label>
+                    <select class="sel-gleba">
+                        <option value="">---</option>
+                    </select>
+                </div>
+            </div>
+            
+            <label>Área (Nome):</label>
+            <input type="text" class="input-nome" disabled placeholder="Automático">
+
+            <button class="btn-remover" onclick="removerArea(${contadorAreas})">❌ Remover Área</button>
+        `;
+
+        document.getElementById('listaAreas').appendChild(div);
+    }
+
+    function atualizarGlebaArea(id) {
+        let bloco = document.getElementById(`bloco_${id}`);
+        let cod = bloco.querySelector('.sel-cod').value;
+        let selectGleba = bloco.querySelector('.sel-gleba');
+        let inputNome = bloco.querySelector('.input-nome');
+
+        if(!cod) {
+            selectGleba.innerHTML = '<option value="">---</option>';
+            inputNome.value = "";
+            return;
+        }
+
+        let info = bancoCache[cod];
+        inputNome.value = info.nome;
+
+        selectGleba.innerHTML = '<option value="">Qual Gleba?</option>';
+        info.glebas.forEach(g => {
+            selectGleba.innerHTML += `<option value="${g}">Gleba ${g}</option>`;
+        });
+    }
+
+    function removerArea(id) {
+        document.getElementById(`bloco_${id}`).remove();
+    }
+
+    function copiarMensagem() {
+        const saudacao = document.getElementById('saudacao').value;
+        const dataVoo = document.getElementById('dataVoo').value;
+        const altura = document.getElementById('alturaVoo').value;
+        const buffer = document.getElementById('bufferVoo').value;
+
+        let textoAreas = "";
+        let temAreaValida = false;
+
+        let blocos = document.querySelectorAll('.area-card');
+        blocos.forEach(bloco => {
+            let cod = bloco.querySelector('.sel-cod').value;
+            let gleba = bloco.querySelector('.sel-gleba').value;
+            let nome = bloco.querySelector('.input-nome').value;
+
+            if(cod) {
+                let txtGleba = gleba ? ` - Gleba ${gleba}` : "";
+                textoAreas += `📍 ${cod} - ${nome}${txtGleba}\n`;
+                temAreaValida = true;
+            }
+        });
+
+        if(!temAreaValida) {
+            alert("Selecione pelo menos uma área para avisar o voo!");
+            return;
+        }
+
+        // MENSAGEM EXATAMENTE IGUAL AO SEU PRINT
+        const mensagem = 
+`${saudacao} com segurança
+
+Aviso de aero levantamento com Drones
+📅 Data: ${dataVoo}
+
+Local de Operação:
+${textoAreas.trim()}
+
+📏 Altura do Voo: ${altura} metros
+🛡️ Buffer de Segurança: ${buffer} metros
+
+🚨 Fiquem atentos à área de operação e ao tráfego de aviões para garantir a segurança.`;
+
+        const mostrarSucesso = () => {
+            let btn = document.getElementById('btnCopiar');
+            let textoOriginal = btn.innerHTML;
+            btn.innerHTML = "✅ Aviso Copiado!";
+            btn.style.background = "#388e3c"; 
+            setTimeout(() => {
+                btn.innerHTML = textoOriginal;
+                btn.style.background = "#66bb6a"; 
+            }, 3000);
+        };
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(mensagem).then(mostrarSucesso).catch(() => {
+                usarCopiaAlternativa(mensagem, mostrarSucesso);
+            });
+        } else {
+            usarCopiaAlternativa(mensagem, mostrarSucesso);
+        }
+    }
+
+    function usarCopiaAlternativa(texto, callbackSucesso) {
+        try {
+            let textArea = document.createElement("textarea");
+            textArea.value = texto;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            let executou = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (executou) {
+                callbackSucesso();
+            } else {
+                alert("Erro. Seu navegador bloqueou totalmente a cópia.");
+            }
+        } catch (err) {
+            alert("Erro. Seu navegador bloqueou totalmente a cópia.");
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TopoMap - Navegação Pro</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <style>
+        :root {
+            --primary-green: #1b5e20;
+            --primary-light: #4caf50;
+            --bg-dark: #1a1a1a;
+            --surface-dark: #263238;
+            --text-light: #eceff1;
+            --accent-blue: #1a73e8;
+            --accent-yellow: #fbc02d;
+            --shadow: 0 4px 12px rgba(0,0,0,0.5);
+            --radius: 12px;
+        }
+
+        body { 
+            margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background-color: var(--bg-dark); display: flex; flex-direction: column; height: 100vh; overflow: hidden; 
+        }
+
+        .nav-header { 
+            background: linear-gradient(135deg, #0a3d0a, #1b5e20); color: white; padding: 12px 16px; 
+            display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.5); z-index: 1000; 
+        }
+        .nav-header .logo-box { display: flex; align-items: center; gap: 10px; }
+        .nav-header .logo-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .nav-header .title { font-size: 16px; font-weight: 800; letter-spacing: 0.5px; }
+
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .btn-upload { 
+            background: #e8f5e9; color: #1b5e20; border: none; padding: 6px 12px; border-radius: 8px; 
+            font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 5px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: 0.2s;
+        }
+        .btn-upload:active { transform: scale(0.95); }
+
+        #mapaNavLivre { flex: 1; width: 100%; position: relative; z-index: 1; }
+
+        .label-talhao {
+            color: #fff; font-size: 13px; font-weight: bold; text-align: center;
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px;
+            white-space: nowrap; pointer-events: none;
+        }
+
+        .btn-search {
+            position: absolute; top: 15px; right: 15px; z-index: 2000;
+            width: 46px; height: 46px; border-radius: 23px; background: white; 
+            border: 2px solid var(--primary-light); box-shadow: var(--shadow); 
+            font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .search-panel {
+            position: absolute; top: 70px; right: 15px; z-index: 2000;
+            width: 280px; background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+            display: none; flex-direction: column; overflow: hidden; animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { opacity:0; transform: translateY(-10px); } to { opacity:1; transform: translateY(0); } }
+        .search-panel input { padding: 12px; border: none; border-bottom: 1px solid #eee; font-size: 15px; outline: none; width: 100%; box-sizing: border-box; }
+        .search-results { max-height: 250px; overflow-y: auto; }
+        .search-item { padding: 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; color: #333; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .search-item:hover { background: #e8f5e9; color: var(--primary-green); }
+
+        .telemetry-panel {
+            background: rgba(15, 15, 15, 0.95); color: #90a4ae; padding: 15px 20px 20px 20px;
+            z-index: 1000; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; 
+            border-top: 3px solid var(--primary-light); box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
+        }
+        .tele-label { font-family: -apple-system, sans-serif; font-size: 10px; text-transform: uppercase; color: var(--primary-light); font-weight: bold; margin-bottom: 8px; display: block; }
+        .telemetry-panel span { color: #fff; font-weight: 700; margin-left: 5px; font-size: 14px; }
+        .tele-speed { color: var(--accent-yellow); font-size: 18px; font-weight: 800; }
+        
+        .btn-center-gps { 
+            position: absolute; bottom: 25px; right: 15px; z-index: 1000; 
+            width: 55px; height: 55px; border-radius: 50%; 
+            background: var(--surface-dark); border: 2px solid #455a64; 
+            box-shadow: var(--shadow); 
+            display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; transition: 0.3s; color: #eceff1;
+        }
+        .gps-icon-svg { width: 28px; height: 28px; stroke: currentColor; }
+        .btn-center-gps.seguindo { 
+            background: var(--accent-blue); border-color: #e8f0fe; 
+            box-shadow: 0 0 15px rgba(26, 115, 232, 0.6); color: white;
+        }
+
+        .btn-voltar { background: transparent; border: none; color: white; font-size: 22px; cursor: pointer; padding: 0 5px; }
+
+        .leaflet-control-container .leaflet-top.leaflet-left {
+            margin-top: 70px; margin-left: 10px; transform: scale(1.3); transform-origin: top left;
+        }
+
+        .gps-marker { position: relative; width: 20px; height: 20px; }
+        .gps-dot {
+            width: 14px; height: 14px; background: var(--accent-blue); border-radius: 50%;
+            border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            position: absolute; top: 3px; left: 3px; z-index: 2;
+        }
+        .gps-pulse {
+            width: 40px; height: 40px; background: rgba(26, 115, 232, 0.35);
+            border-radius: 50%; position: absolute; top: -10px; left: -10px;
+            animation: gps_pulse 1.5s infinite ease-out; z-index: 1;
+        }
+        @keyframes gps_pulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div class="nav-header">
+        <div class="logo-box">
+            <button class="btn-voltar" onclick="window.history.back()">🔙</button>
+            <div class="logo-icon">🧭</div>
+            <div class="title">Navegação de Campo</div>
+        </div>
+        <div class="header-actions">
+            <span id="statusMapa" style="font-size:11px; background:#fbc02d; color:#000; padding:4px 8px; border-radius:12px; font-weight:bold;">S/ Mapa</span>
+            <button class="btn-upload" onclick="document.getElementById('inputZips').click()" id="btnUploadText">
+                🗺️ Carregar .ZIP
+            </button>
+            <input type="file" id="inputZips" accept=".zip" style="display:none" onchange="processarZips(event)">
+        </div>
+    </div>
+    
+    <div id="mapaNavLivre">
+        <button class="btn-search" onclick="toggleSearch()">🔍</button>
+        <div class="search-panel" id="searchPanel">
+            <input type="text" id="searchInput" placeholder="Buscar fazenda ou talhão..." onkeyup="filtrarBusca()">
+            <div class="search-results" id="searchResults"></div>
+        </div>
+
+        <button id="btnGps" class="btn-center-gps" onclick="centralizarGPSNav()">
+            <svg class="gps-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="8" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2V5M12 19V22M2 12H5M19 12H22" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="telemetry-panel">
+        <span class="tele-label">Telemetria do Veículo</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 5px;">
+            <div>
+                <div style="margin-bottom:4px;">LAT <span id="teleLat">Buscando...</span></div>
+                <div style="margin-bottom:4px;">LON <span id="teleLng">Buscando...</span></div>
+                <div>ALT <span id="teleAlt">-- m</span></div>
+            </div>
+            <div style="text-align:right;">
+                <div style="margin-bottom:4px;">VEL <span id="teleVel" class="tele-speed">0 km/h</span></div>
+                <div>SINAL <span id="teleAcc">-- m</span></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let mapNav = L.map('mapaNavLivre', {zoomControl: false, preferCanvas: true}).setView([-22.3, -53.8], 12);
+    L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 20 }).addTo(mapNav);
+
+    let layerPoligonos = L.featureGroup();
+    let markersTalhoes = L.layerGroup();
+
+    let navWatchId = null; let markerNav = null; let circleNav = null; let navAutoCenter = true;
+    let fazendasDados = {}; 
+
+    mapNav.on('dragstart', () => { 
+        navAutoCenter = false; document.getElementById('btnGps').classList.remove('seguindo');
+    });
+
+    mapNav.on('zoomend', function() {
+        let z = mapNav.getZoom();
+        if (z >= 15) {
+            if (!mapNav.hasLayer(markersTalhoes)) mapNav.addLayer(markersTalhoes);
+        } else {
+            if (mapNav.hasLayer(markersTalhoes)) mapNav.removeLayer(markersTalhoes);
+        }
+    });
+
+    let drawnItems = new L.FeatureGroup();
+    mapNav.addLayer(drawnItems);
+    L.drawLocal.draw.toolbar.actions.title = 'Cancelar'; L.drawLocal.draw.toolbar.actions.text = 'Cancelar';
+    L.drawLocal.draw.toolbar.finish.title = 'Finalizar'; L.drawLocal.draw.toolbar.finish.text = 'Finalizar';
+    L.drawLocal.draw.toolbar.undo.title = 'Desfazer'; L.drawLocal.draw.toolbar.undo.text = 'Desfazer';
+
+    let drawControl = new L.Control.Draw({
+        position: 'topleft',
+        edit: { featureGroup: drawnItems, remove: true },
+        draw: {
+            polygon: { allowIntersection: false, shapeOptions: { color: '#ef5350', weight: 3 } },
+            polyline: { shapeOptions: { color: '#00e5ff', weight: 4 } },
+            marker: true, circle: false, rectangle: false, circlemarker: false
+        }
+    });
+    mapNav.addControl(drawControl);
+
+    mapNav.on(L.Draw.Event.CREATED, function (event) {
+        let layer = event.layer; let type = event.layerType;
+        if (type === 'polygon') {
+            let areaHectares = turf.area(layer.toGeoJSON()) / 10000;
+            layer.bindPopup(`<div style="text-align:center;"><b>ÁREA MEDIDA</b><br><span style="font-size:18px; color:#2e7d32; font-weight:bold;">${areaHectares.toFixed(2)} ha</span></div>`).openPopup();
+        } else if (type === 'polyline') {
+            let lengthKm = turf.length(layer.toGeoJSON(), {units: 'kilometers'});
+            let lengthM = lengthKm * 1000;
+            let texto = lengthM > 1000 ? `${lengthKm.toFixed(2)} km` : `${lengthM.toFixed(1)} metros`;
+            layer.bindPopup(`<div style="text-align:center;"><b>DISTÂNCIA</b><br><span style="font-size:18px; color:#0277bd; font-weight:bold;">${texto}</span></div>`).openPopup();
+        } else if (type === 'marker') {
+            let nota = prompt("📝 Digite a anotação:");
+            if (nota) layer.bindPopup(`<b>Anotação:</b><br>${nota}`).openPopup();
+        }
+        drawnItems.addLayer(layer);
+    });
+
+    function toggleSearch() {
+        let p = document.getElementById('searchPanel');
+        if(p.style.display === 'flex') { p.style.display = 'none'; }
+        else { p.style.display = 'flex'; document.getElementById('searchInput').focus(); filtrarBusca(); }
+    }
+
+    function filtrarBusca() {
+        let val = document.getElementById('searchInput').value.toUpperCase();
+        let resDiv = document.getElementById('searchResults');
+        resDiv.innerHTML = '';
+        
+        Object.keys(fazendasDados).forEach(cod => {
+            let fz = fazendasDados[cod];
+            if(fz.nome.toUpperCase().includes(val)) {
+                let div = document.createElement('div');
+                div.className = 'search-item';
+                div.innerText = `📍 ${fz.nome}`;
+                div.onclick = () => {
+                    mapNav.fitBounds(fz.bounds);
+                    document.getElementById('searchPanel').style.display = 'none';
+                    navAutoCenter = false; document.getElementById('btnGps').classList.remove('seguindo');
+                };
+                resDiv.appendChild(div);
+            }
+        });
+    }
+
+    const dbPromise = new Promise((resolve, reject) => {
+        let req = indexedDB.open("TopoMapDB", 1);
+        req.onupgradeneeded = e => { e.target.result.createObjectStore("mapas"); };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject("Erro DB");
+    });
+
+    async function salvarNoCelular(dados) {
+        let db = await dbPromise; let tx = db.transaction("mapas", "readwrite");
+        tx.objectStore("mapas").put(dados, "meuMapaSHP");
+        return new Promise(resolve => tx.oncomplete = resolve);
+    }
+
+    async function carregarMapaLocal() {
+        let db = await dbPromise;
+        return new Promise(resolve => {
+            let req = db.transaction("mapas").objectStore("mapas").get("meuMapaSHP");
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    async function inicializar() {
+        let bancoLocal = await carregarMapaLocal();
+        if(bancoLocal && bancoLocal.length > 0) {
+            document.getElementById('btnUploadText').innerHTML = "🔄 Atualizar .ZIP";
+        }
+        renderizarMapaLimpo(bancoLocal);
+        iniciarGPS();
+    }
+
+    function renderizarMapaLimpo(bancoLocal) {
+        layerPoligonos.clearLayers();
+        markersTalhoes.clearLayers();
+        fazendasDados = {}; 
+
+        if(!bancoLocal || bancoLocal.length === 0) {
+            document.getElementById('statusMapa').innerText = "S/ Mapa";
+            document.getElementById('statusMapa').style.background = "#d32f2f";
+            return;
+        }
+
+        document.getElementById('statusMapa').innerText = "✅ Memória Ativa";
+        document.getElementById('statusMapa').style.background = "#34a853";
+        document.getElementById('statusMapa').style.color = "#fff";
+
+        bancoLocal.forEach(p => {
+            let geojsonFeature = { type: "Feature", properties: p, geometry: p.geom };
+            let poly = L.geoJSON(geojsonFeature, {
+                style: { color: '#03a9f4', weight: 1.5, fillOpacity: 0.1 },
+                smoothFactor: 2.5 
+            });
+            poly.on('click', () => {
+                navAutoCenter = false; document.getElementById('btnGps').classList.remove('seguindo');
+                alert(`🚜 INFORMAÇÕES DA ÁREA:\n\nFazenda: ${p.faz}\nGleba: ${p.gleba}\nTalhão: ${p.talhao}\nÁrea Real: ${p.ha.toFixed(2)} ha`);
+            });
+            layerPoligonos.addLayer(poly);
+
+            let polyBounds = poly.getBounds();
+            let tIcon = L.divIcon({ className: 'label-talhao', html: p.talhao, iconSize: null });
+            markersTalhoes.addLayer(L.marker(polyBounds.getCenter(), {icon: tIcon, interactive: false}));
+
+            let fKey = p.cod;
+            if(!fazendasDados[fKey]) fazendasDados[fKey] = { nome: p.faz, bounds: L.latLngBounds(polyBounds) };
+            else fazendasDados[fKey].bounds.extend(polyBounds);
+        });
+
+        mapNav.addLayer(layerPoligonos);
+        if(layerPoligonos.getBounds().isValid()) {
+            mapNav.fitBounds(layerPoligonos.getBounds());
+            mapNav.fire('zoomend'); 
+        }
+    }
+
+    async function processarZips(event) {
+        const files = event.target.files; if(!files.length) return;
+        let novo = []; document.getElementById('statusMapa').innerText = "Lendo..."; document.getElementById('statusMapa').style.background = "#ef6c00";
+        try {
+            for(let f of files) {
+                let geo = await shp(await f.arrayBuffer()); if(Array.isArray(geo)) geo=geo[0];
+                geo.features.forEach(feat => {
+                    let p={}; for(let k in feat.properties) p[k.toUpperCase()]=feat.properties[k];
+                    let codFaz = String(p.FAZENDA||p.CODIGO||"").trim(); let nomeFaz = String(p.PROPRIEDAD||p.NOME||"").trim();
+                    let valArea = p.HECTARE || p.AREA || p.HA || p.AREA_HA || 0;
+                    let calcRealHa = parseFloat(String(valArea).replace(',', '.')) || 0;
+                    if(calcRealHa > 1000) calcRealHa = calcRealHa / 10000;
+                    if(codFaz) novo.push({ cod: codFaz, faz: nomeFaz ? `${codFaz} - ${nomeFaz}` : codFaz, nome: nomeFaz, gleba: String(p.GLEBA||"").trim(), talhao: String(p.TALHAO||"").trim(), setor: String(p.SETOR||"").trim(), ha: calcRealHa, geom: feat.geometry });
+                });
+            }
+            await salvarNoCelular(novo); 
+            renderizarMapaLimpo(novo); 
+            document.getElementById('btnUploadText').innerHTML = "🔄 Atualizar .ZIP";
+            alert("✅ Mapa processado e salvo na Memória Universal!");
+        } catch(e) { 
+            alert("❌ Erro ao ler o arquivo SHP."); document.getElementById('statusMapa').innerText = "Erro"; document.getElementById('statusMapa').style.background = "#d32f2f";
+        }
+        event.target.value = ""; 
+    }
+
+    function centralizarGPSNav() {
+        navAutoCenter = true; document.getElementById('btnGps').classList.add('seguindo');
+        if(markerNav) mapNav.setView(markerNav.getLatLng(), 18);
+    }
+
+    function iniciarGPS() {
+        if(navWatchId) navigator.geolocation.clearWatch(navWatchId);
+        navAutoCenter = true; document.getElementById('btnGps').classList.add('seguindo');
+        navWatchId = navigator.geolocation.watchPosition(pos => {
+            let lat = pos.coords.latitude; let lng = pos.coords.longitude;
+            let acc = pos.coords.accuracy; let alt = pos.coords.altitude || 0; let spd = (pos.coords.speed || 0) * 3.6; 
+            document.getElementById('teleLat').innerText = lat.toFixed(6);
+            document.getElementById('teleLng').innerText = lng.toFixed(6);
+            document.getElementById('teleAlt').innerText = alt.toFixed(1) + " m";
+            document.getElementById('teleVel').innerText = spd.toFixed(1) + " km/h";
+            let accElement = document.getElementById('teleAcc'); accElement.innerText = acc.toFixed(1) + " m";
+            if(acc > 20) accElement.style.color = "#ef5350"; else accElement.style.color = "#fff";
+            let latlng = [lat, lng];
+            if(!markerNav) {
+                let gpsIcon = L.divIcon({ className: 'gps-marker', html: '<div class="gps-pulse"></div><div class="gps-dot"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+                markerNav = L.marker(latlng, {icon: gpsIcon, zIndexOffset: 1000}).addTo(mapNav);
+                circleNav = L.circle(latlng, {radius: acc, color: '#4285F4', fillOpacity: 0.15, weight: 1}).addTo(mapNav);
+                if(navAutoCenter) mapNav.setView(latlng, 18);
+            } else {
+                markerNav.setLatLng(latlng); circleNav.setLatLng(latlng); circleNav.setRadius(acc);
+                if(navAutoCenter) mapNav.setView(latlng, mapNav.getZoom());
+            }
+        }, err => { console.log("Sinal do Satélite não encontrado:", err); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    }
+
+    window.onload = () => { inicializar(); };
+</script>
+</body>
+</html>

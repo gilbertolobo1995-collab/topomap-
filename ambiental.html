@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TopoMap Ambiental Pro + PDF + Earth</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+
+    <style>
+        body { 
+            margin: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            background: #f4f6f8; 
+        }
+
+        .header { 
+            background: linear-gradient(135deg, #0a3d0a, #1b5e20);
+            color: white; 
+            padding: 12px 16px; 
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 1000; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            position: relative;
+        }
+        .header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #fbc02d, #4caf50, #fbc02d); }
+        .header .logo { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .header .brand-name { font-size: 17px; font-weight: 800; letter-spacing: .5px; line-height: 1.1; }
+        .header .brand-sub { font-size: 11.5px; font-weight: 500; opacity: .9; margin-top: 1px; }
+
+        #mapa { 
+            flex: 1; 
+            width: 100%; 
+            z-index: 1; 
+            position: relative; 
+        }
+
+        .painel-inferior { 
+            background: white; 
+            padding: 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.15); 
+            z-index: 1000; 
+            border-radius: 16px 16px 0 0; 
+        }
+
+        .input-titulo-laudo {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            font-weight: bold;
+            color: #1b5e20;
+            background: #e8f5e9;
+            border: 2px dashed #2e7d32;
+            border-radius: 12px;
+            text-align: center;
+            box-sizing: border-box;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .btn-principal { 
+            width: 100%; 
+            min-height: 58px; 
+            border-radius: 12px; 
+            border: 2px solid #0d47a1; 
+            background: #1a73e8; 
+            color: white; 
+            font-size: 15px; 
+            font-weight: bold; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 8px; 
+            cursor: pointer; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
+        }
+
+        .linha-opcao { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            font-size: 13px; 
+            font-weight: 600; 
+            color: #37474f; 
+            padding: 2px 4px; 
+            text-transform: none; 
+        }
+
+        .linha-opcao input { 
+            width: 20px; 
+            height: 20px; 
+            margin: 0; 
+        }
+
+        .grade-botoes { 
+            display: grid; 
+            grid-template-columns: repeat(5, 1fr); 
+            gap: 8px; 
+            width: 100%; 
+        }
+
+        .btn-wrap { 
+            position: relative; 
+            width: 100%; 
+        }
+
+        .btn-menu { 
+            width: 100%; 
+            height: 72px; 
+            border-radius: 12px; 
+            border: none; 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 5px; 
+            text-align: center; 
+            line-height: 1.15; 
+            padding: 6px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.18); 
+            box-sizing: border-box; 
+        }
+
+        .btn-menu span:first-child { 
+            font-size: 22px; 
+            line-height: 1; 
+        }
+
+        .btn-menu small { 
+            font-size: 11px; 
+            font-weight: bold; 
+            line-height: 1.15; 
+        }
+
+        .input-oculto { 
+            position:absolute; 
+            left:0; 
+            top:0; 
+            opacity:0; 
+            width:100%; 
+            height:100%; 
+            cursor:pointer; 
+        }
+
+        .bg-green { background: #2e7d32; }
+        .bg-blue { background: #1a73e8; }
+        .bg-dark { background: #37474f; }
+        .bg-red { background: #d32f2f; }
+        .bg-orange { background: #ef6c00; }
+
+        .btn-gps-mapa { 
+            position: absolute; 
+            bottom: 20px; 
+            right: 10px; 
+            z-index: 1000; 
+            background: white; 
+            border: 2px solid #ccc; 
+            border-radius: 50%; 
+            width: 54px; 
+            height: 54px; 
+            font-size: 25px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+
+        .modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.8); 
+            z-index: 2000; 
+            align-items: flex-end; 
+        }
+
+        .modal-content { 
+            background: white; 
+            width: 100%; 
+            padding: 20px; 
+            border-radius: 20px 20px 0 0; 
+            box-sizing: border-box; 
+            max-height: 90vh; 
+            overflow-y: auto; 
+        }
+
+        input, select, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 5px 0 12px 0; 
+            border: 1px solid #ccc; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            box-sizing: border-box; 
+            background: #f9f9f9; 
+            transition: 0.2s; 
+        }
+
+        label { 
+            font-size: 11px; 
+            font-weight: bold; 
+            color: #1b5e20; 
+            text-transform: uppercase; 
+        }
+
+        .readonly { 
+            background: #eceff1 !important; 
+            color: #546e7a; 
+            font-weight: bold; 
+            border-color:#cfd8dc; 
+        }
+
+        .foto-container { 
+            text-align: center; 
+            margin: 10px 0; 
+            border: 2px dashed #ccc; 
+            padding: 15px; 
+            border-radius: 10px; 
+            background: #fafafa; 
+        }
+
+        #previewImg { 
+            max-width: 100%; 
+            max-height: 150px; 
+            border-radius: 8px; 
+            display: none; 
+            margin-top: 10px; 
+        }
+
+        .floating-info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            right: 10px; 
+            background: rgba(255,255,255,0.92); 
+            padding: 9px; 
+            border-radius: 10px; 
+            font-size: 12px; 
+            font-weight: bold; 
+            z-index: 1000; 
+            border-left: 5px solid #2e7d32; 
+            pointer-events: none; 
+            text-align: center; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
+        }
+
+        .box-manual { 
+            display:flex; 
+            align-items:center; 
+            gap:8px; 
+            margin-bottom:15px; 
+            cursor:pointer; 
+            color:#e65100; 
+            font-weight:bold; 
+            font-size:12px; 
+            background:#fff3e0; 
+            padding:10px; 
+            border-radius:8px; 
+            border: 1px solid #ffcc80; 
+            text-transform: none; 
+        }
+
+        .box-manual input { 
+            width: auto; 
+            margin: 0; 
+            transform: scale(1.2); 
+        }
+
+        .btn-form { 
+            width: 100%; 
+            margin-top: 10px; 
+            font-size: 16px; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border: none; 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+
+        .btn-foto { 
+            margin: auto; 
+            padding: 12px; 
+            border-radius: 8px; 
+            border: none; 
+            color: white; 
+            background: #1a73e8; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+
+        @media (max-width: 390px) {
+            .btn-menu { height: 66px; }
+            .btn-menu span:first-child { font-size: 20px; }
+            .btn-menu small { font-size: 10px; }
+            .grade-botoes { gap: 6px; }
+            .btn-principal { min-height: 54px; font-size: 14px; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo">🛰️</div>
+        <div>
+            <div class="brand-name">TopoMap</div>
+            <div class="brand-sub">Levantamento Ambiental</div>
+        </div>
+    </div>
+    
+    <div id="mapa">
+        <div id="infoGeo" class="floating-info">📍 Buscando sinal de GPS...</div>
+        <button class="btn-gps-mapa" onclick="centralizarGPS()" title="Minha Localização">🎯</button>
+    </div>
+
+    <div class="painel-inferior">
+        
+        <input type="text" id="inpTituloLaudo" class="input-titulo-laudo" value="LAUDO AMBIENTAL DE CAMPO" placeholder="DIGITE O TÍTULO DO LAUDO">
+
+        <button class="btn-principal" onclick="registrarPontoGPS()">
+            <span>📍</span>
+            <span>REGISTRAR PONTO AQUI</span>
+        </button>
+
+        <label class="linha-opcao">
+            <input type="checkbox" id="chkAutoCentralizar" onchange="toggleAutoCentralizar()">
+            🎯 Centralizar automaticamente no GPS
+        </label>
+
+        <div class="grade-botoes">
+            <div class="btn-wrap">
+                <button class="btn-menu bg-orange" type="button">
+                    <span>🛩️</span>
+                    <small>Foto<br>Drone</small>
+                </button>
+                <input type="file" id="inpDrone" accept="image/*,.jpg,.jpeg,.tif,.tiff" class="input-oculto" onchange="importarFotoDrone(event)">
+            </div>
+
+            <div class="btn-wrap">
+                <button id="btnCarregarMapa" class="btn-menu bg-dark" type="button">
+                    <span>🗺️</span>
+                    <small>Mapa</small>
+                </button>
+                <input type="file" id="inpShp" accept=".zip" class="input-oculto" onchange="importarMapaExtra(event)">
+            </div>
+
+            <button class="btn-menu bg-green" onclick="baixarExcel()">
+                <span>📊</span>
+                <small>Excel</small>
+            </button>
+
+            <button class="btn-menu bg-red" onclick="gerarPDF()">
+                <span>📄</span>
+                <small>PDF</small>
+            </button>
+
+            <button class="btn-menu bg-orange" onclick="limparSessao()">
+                <span>🧹</span>
+                <small>Limpar</small>
+            </button>
+        </div>
+    </div>
+
+    <div class="modal" id="modalForm">
+        <div class="modal-content">
+            <h3 style="color:#2e7d32; margin-top:0;">🍃 Registro de Ocorrência</h3>
+            
+            <label class="box-manual">
+                <input type="checkbox" id="chkManual" onchange="toggleEdicaoLocal()">
+                ✏️ Digitar local manualmente (Área Nova/Expansão)
+            </label>
+
+            <div style="display: flex; gap: 8px;">
+                <div style="flex: 1;">
+                    <label>Faz. (Cód):</label>
+                    <input type="text" id="fCod" class="readonly" readonly>
+                </div>
+                <div style="flex: 1;">
+                    <label>Gleba:</label>
+                    <input type="text" id="fGleb" class="readonly" readonly>
+                </div>
+                <div style="flex: 1;">
+                    <label>Setor:</label>
+                    <input type="text" id="fSetor" class="readonly" readonly>
+                </div>
+            </div>
+
+            <label>Fazenda / Local:</label>
+            <input type="text" id="fNome" class="readonly" readonly>
+
+            <label>Tipo de Objeto:</label>
+            <select id="fTipo" onchange="toggleCampos()">
+                <option value="Árvore Isolada">🌳 Árvore Isolada</option>
+                <option value="Caieira">🔥 Caieira / Pilha</option>
+                <option value="Nascente">💧 Nascente / APP</option>
+            </select>
+
+            <div class="foto-container">
+                <label style="display: block; margin-bottom: 8px;">Evidência Fotográfica:</label>
+                <button class="btn-foto" onclick="document.getElementById('fFoto').click()">📸 Tirar Foto Agora</button>
+                <input type="file" id="fFoto" accept="image/*" capture="camera" style="display:none" onchange="previewFotoComprimida(event)">
+                <img id="previewImg" src="">
+            </div>
+
+            <div id="camposArvore">
+                <label>Espécie:</label>
+                <input type="text" id="fEspecie" placeholder="Ipê, Aroeira...">
+                
+                <div style="display: flex; gap: 8px;">
+                    <div style="flex: 1;">
+                        <label>DAP (cm):</label>
+                        <input type="number" id="fDap">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Altura (m):</label>
+                        <input type="number" id="fAlt">
+                    </div>
+                </div>
+
+                <label>Status da Árvore:</label>
+                <select id="fStatusArvore">
+                    <option value="Viva">🌳 Viva</option>
+                    <option value="Morta">🪵 Morta</option>
+                    <option value="Morta Caída">🍂 Morta Caída</option>
+                </select>
+            </div>
+
+            <div id="camposGerais" style="display:none;">
+                <label>Observações:</label>
+                <textarea id="fDesc" rows="2" placeholder="Detalhes..."></textarea>
+            </div>
+
+            <button class="btn-form bg-green" onclick="salvarPonto()">💾 Salvar Registro</button>
+            <button onclick="fecharModal()" style="width:100%; padding:15px; background:none; border:none; color:#666; font-weight:bold;">Cancelar</button>
+        </div>
+    </div>
+
+<script>
+    const URL_BANCO = "https://radar-topomap-default-rtdb.firebaseio.com/historico_ambiental.json";
+    // ===== Cloudinary — armazenamento de arquivos GRÁTIS (mesma conta dos outros apps) =====
+    const CLOUDINARY_CLOUD_NAME = "m5k3vumt";
+    const CLOUDINARY_UPLOAD_PRESET = "Topomap";
+    async function uploadPDFCloudinary(base64OuDataUri, nomeArquivo) {
+        const dataUri = String(base64OuDataUri).startsWith('data:') ? base64OuDataUri : `data:application/pdf;base64,${base64OuDataUri}`;
+        const form = new FormData();
+        form.append('file', dataUri);
+        form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        form.append('public_id', String(nomeArquivo || 'laudo').replace(/\.pdf$/i,'').replace(/[^a-z0-9_-]/gi,'_') + '_' + Date.now());
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: 'POST', body: form });
+        if (!res.ok) throw new Error('Cloudinary HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.secure_url) throw new Error('Cloudinary sem URL');
+        return data.secure_url;
+    }
+    
+    let topografoAtual = localStorage.getItem('nome_topografo') || "";
+
+    if(!topografoAtual) {
+        topografoAtual = prompt("Digite seu nome (Topógrafo):");
+        if(topografoAtual) localStorage.setItem('nome_topografo', topografoAtual);
+    }
+
+    const map = L.map('mapa', { zoomControl: false }).setView([-22.30, -53.81], 14);
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+        maxZoom: 20 
+    }).addTo(map);
+
+    let baseMapaGeoJSON = null;
+    let camadaMapa = L.geoJSON().addTo(map);
+    let camadaPontos = L.featureGroup().addTo(map);
+    let fotoBase64 = "";
+
+    let markerGPS = null;
+    let circleGPS = null;
+    let markerDrone = null;
+    let autoCentralizar = false;
+
+    let levantamentos = JSON.parse(localStorage.getItem('ambiental_pontos_offline') || "[]");
+
+    function setInfo(msg) {
+        document.getElementById('infoGeo').innerText = msg;
+    }
+
+    function renderizarPontosSalvos() {
+        camadaPontos.clearLayers();
+
+        levantamentos.forEach(r => {
+            let corPonto = (r.tipo === 'Árvore Isolada') ? '#2e7d32' : (r.tipo === 'Caieira' ? '#ef6c00' : '#1a73e8');
+
+            L.circleMarker([r.lat, r.lng], { 
+                radius: 8, 
+                color: '#fff', 
+                fillColor: corPonto, 
+                fillOpacity: 1 
+            })
+            .bindPopup(`<b>${r.fazenda}</b><br>${r.tipo}<br>Lat: ${r.lat}<br>Lng: ${r.lng}`)
+            .addTo(camadaPontos);
+        });
+    }
+
+    const dbPromise = new Promise((resolve, reject) => {
+        let req = indexedDB.open("TopoMapDB", 1);
+
+        req.onupgradeneeded = e => { 
+            e.target.result.createObjectStore("mapas"); 
+        };
+
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject("Erro ao abrir banco local.");
+    });
+
+    async function lerDoCelular() {
+        let db = await dbPromise;
+
+        return new Promise(resolve => {
+            let req = db.transaction("mapas").objectStore("mapas").get("meuMapaSHP");
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    window.onload = async () => {
+        let dS = await lerDoCelular();
+
+        if(dS) {
+            let features = dS.map(t => ({ 
+                type: "Feature", 
+                properties: { 
+                    FAZENDA: t.cod, 
+                    PROPRIEDAD: t.nome, 
+                    GLEBA: t.gleba,
+                    SETOR: t.setor
+                }, 
+                geometry: t.geom 
+            }));
+
+            baseMapaGeoJSON = { 
+                type: "FeatureCollection", 
+                features: features 
+            };
+            
+            camadaMapa.clearLayers();
+
+            camadaMapa.addData(baseMapaGeoJSON).setStyle({ 
+                color: '#2e7d32', 
+                weight: 1, 
+                fillOpacity: 0.1 
+            });
+            
+            let btnMapa = document.getElementById('btnCarregarMapa');
+            btnMapa.innerHTML = "<span>✅</span><small>Mapa<br>Ativo</small>";
+            btnMapa.classList.remove('bg-dark');
+            btnMapa.classList.add('bg-green');
+        }
+        
+        renderizarPontosSalvos();
+        sincronizarFilaAmbiental();
+    };
+
+    map.locate({
+        setView: false, 
+        maxZoom: 18, 
+        watch: true, 
+        enableHighAccuracy: true
+    });
+
+    map.on('locationfound', function(e) {
+        let radius = e.accuracy / 2;
+
+        setInfo("📍 GPS Conectado. Clique em Registrar Ponto.");
+        
+        if (!markerGPS) {
+            markerGPS = L.circleMarker(e.latlng, { 
+                radius: 8, 
+                fillColor: '#1a73e8', 
+                color: '#fff', 
+                weight: 2, 
+                fillOpacity: 1, 
+                zIndexOffset: 1000 
+            }).addTo(map);
+
+            circleGPS = L.circle(e.latlng, radius, { 
+                color: '#1a73e8', 
+                fillOpacity: 0.15 
+            }).addTo(map);
+        } else {
+            markerGPS.setLatLng(e.latlng);
+            circleGPS.setLatLng(e.latlng);
+            circleGPS.setRadius(radius);
+        }
+
+        if(autoCentralizar) {
+            map.setView(e.latlng, 18);
+        }
+    });
+
+    map.on('locationerror', function(e) {
+        setInfo("⚠️ Sem sinal de GPS. Ative a localização.");
+    });
+
+    function centralizarGPS() {
+        if(markerGPS) {
+            map.setView(markerGPS.getLatLng(), 18);
+        } else {
+            map.locate({
+                setView: true, 
+                maxZoom: 18, 
+                enableHighAccuracy: true
+            });
+        }
+    }
+
+    function toggleAutoCentralizar() {
+        autoCentralizar = document.getElementById('chkAutoCentralizar').checked;
+
+        if(autoCentralizar && markerGPS) {
+            map.setView(markerGPS.getLatLng(), 18);
+        }
+    }
+
+    function encontrarLocalInteligente(lat, lng) {
+        let local = { 
+            cod: "-", 
+            nome: "Área não mapeada", 
+            gleba: "-",
+            setor: "-"
+        };
+
+        if(!baseMapaGeoJSON) return local;
+
+        const pontoUsuario = turf.point([Number(lng), Number(lat)]);
+        let menorDistancia = Infinity;
+        let featureMaisProxima = null;
+
+        for (let f of baseMapaGeoJSON.features) {
+            if (turf.booleanPointInPolygon(pontoUsuario, f)) {
+                featureMaisProxima = f;
+                menorDistancia = 0;
+                break;
+            }
+            
+            let centro = turf.centroid(f);
+            let distMts = turf.distance(pontoUsuario, centro, {units: 'meters'});
+
+            if(distMts < menorDistancia) {
+                menorDistancia = distMts;
+                featureMaisProxima = f;
+            }
+        }
+
+        if (featureMaisProxima && menorDistancia < 2500) {
+            let p = featureMaisProxima.properties;
+
+            local = { 
+                cod: p.FAZENDA || p.CODIGO || "-", 
+                nome: p.PROPRIEDAD || p.NOME || "-", 
+                gleba: p.GLEBA || "-",
+                setor: p.SETOR || "-"
+            };
+        }
+
+        return local;
+    }
+
+    map.on('click', function(e) {
+        let local = encontrarLocalInteligente(e.latlng.lat, e.latlng.lng);
+        abrirForm(e.latlng.lat, e.latlng.lng, local);
+    });
+
+    function registrarPontoGPS() {
+        if(!markerGPS) {
+            return alert("Aguarde o sinal do GPS estabilizar, ou clique no alvo 🎯 para buscar sua localização.");
+        }
+
+        let lat = markerGPS.getLatLng().lat;
+        let lng = markerGPS.getLatLng().lng;
+        
+        let local = encontrarLocalInteligente(lat, lng);
+        abrirForm(lat, lng, local);
+    }
+
+    async function importarFotoDrone(event) {
+        const file = event.target.files[0];
+        event.target.value = "";
+
+        if(!file) return;
+
+        setInfo("🛩️ Lendo GPS da foto do drone...");
+
+        try {
+            let gps = await lerGPSFotoDrone(file);
+
+            if(!gps) {
+                setInfo("⚠️ Foto do drone sem GPS legível. Nenhum ponto foi criado.");
+                alert(
+                    "Não encontrei coordenada GPS nessa foto.\n\n" +
+                    "Nenhum ponto foi criado para evitar salvar coordenada errada.\n\n" +
+                    "Use o JPG original da pasta DCIM do drone/cartão."
+                );
+                return;
+            }
+
+            const lat = Number(gps.lat);
+            const lng = Number(gps.lng);
+
+            if(!coordenadaValida(lat, lng)) {
+                setInfo("⚠️ GPS encontrado, mas coordenada inválida.");
+
+                alert(
+                    "A foto tem dados GPS, mas a coordenada lida ficou inválida.\n\n" +
+                    "Lat lida: " + gps.lat + "\n" +
+                    "Lng lida: " + gps.lng + "\n" +
+                    "Origem: " + gps.origem
+                );
+
+                return;
+            }
+
+            const base64 = await comprimirFotoArquivoAsync(file);
+
+            let local = encontrarLocalInteligente(lat, lng);
+            abrirForm(lat, lng, local);
+
+            fotoBase64 = base64;
+
+            const imgDisplay = document.getElementById('previewImg');
+            imgDisplay.src = fotoBase64;
+            imgDisplay.style.display = 'block';
+
+            if(markerDrone) {
+                map.removeLayer(markerDrone);
+            }
+
+            markerDrone = L.circleMarker([lat, lng], {
+                radius: 11,
+                color: '#fff',
+                fillColor: '#ef6c00',
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map).bindPopup("🛩️ Coordenada lida da foto do drone").openPopup();
+
+            map.setView([lat, lng], 19);
+
+            setInfo("✅ GPS da foto encontrado. Preencha as informações e salve.");
+
+            alert(
+                "GPS encontrado na foto do drone:\n\n" +
+                "Lat: " + lat + "\n" +
+                "Lng: " + lng + "\n" +
+                "Origem: " + gps.origem
+            );
+
+        } catch(erro) {
+            console.error(erro);
+            setInfo("⚠️ Erro ao tentar ler GPS da foto.");
+            alert(
+                "Erro ao tentar ler o GPS da foto.\n\n" +
+                "Abra o app com internet e use JPG original do drone.\n\n" +
+                "Erro: " + erro
+            );
+        }
+    }
+
+    async function lerGPSFotoDrone(file) {
+        let tentativas = [];
+
+        let gps1 = await tentarGPSExifr(file);
+        if(gps1) tentativas.push(gps1);
+
+        let gps2 = await tentarGPSMetadataCompleta(file);
+        if(gps2) tentativas.push(gps2);
+
+        let gps3 = await tentarGPSPorTextoInterno(file);
+        if(gps3) tentativas.push(gps3);
+
+        for(let gps of tentativas) {
+            let lat = Number(gps.lat);
+            let lng = Number(gps.lng);
+
+            if(coordenadaValida(lat, lng)) {
+                return {
+                    lat: lat,
+                    lng: lng,
+                    origem: gps.origem
+                };
+            }
+        }
+
+        if(tentativas.length > 0) {
+            return tentativas[0];
+        }
+
+        return null;
+    }
+
+    function coordenadaValida(lat, lng) {
+        return !isNaN(lat) && 
+               !isNaN(lng) && 
+               lat >= -90 && 
+               lat <= 90 && 
+               lng >= -180 && 
+               lng <= 180 &&
+               lat !== 0 &&
+               lng !== 0;
+    }
+
+    async function tentarGPSExifr(file) {
+        try {
+            if(!window.exifr) return null;
+
+            const gps = await exifr.gps(file);
+
+            if(gps && gps.latitude !== undefined && gps.longitude !== undefined) {
+                return {
+                    lat: converterCoordenada(gps.latitude),
+                    lng: converterCoordenada(gps.longitude),
+                    origem: "exifr.gps"
+                };
+            }
+        } catch(e) {
+            console.log("Falha exifr.gps", e);
+        }
+
+        return null;
+    }
+
+    async function tentarGPSMetadataCompleta(file) {
+        try {
+            if(!window.exifr) return null;
+
+            const meta = await exifr.parse(file, {
+                tiff: true,
+                ifd0: true,
+                exif: true,
+                gps: true,
+                xmp: true,
+                mergeOutput: true
+            });
+
+            console.log("METADADOS FOTO DRONE:", meta);
+
+            if(!meta) return null;
+
+            let lat = pegarValorPorChaves(meta, [
+                "latitude",
+                "Latitude",
+                "GPSLatitude",
+                "GpsLatitude",
+                "gpsLatitude",
+                "drone-dji:GPSLatitude",
+                "drone-dji:GpsLatitude"
+            ]);
+
+            let lng = pegarValorPorChaves(meta, [
+                "longitude",
+                "Longitude",
+                "GPSLongitude",
+                "GpsLongitude",
+                "gpsLongitude",
+                "GPSLongtitude",
+                "GpsLongtitude",
+                "gpsLongtitude",
+                "drone-dji:GPSLongitude",
+                "drone-dji:GpsLongitude",
+                "drone-dji:GPSLongtitude",
+                "drone-dji:GpsLongtitude"
+            ]);
+
+            let latRef = pegarValorPorChaves(meta, [
+                "GPSLatitudeRef",
+                "GpsLatitudeRef",
+                "latitudeRef",
+                "LatitudeRef"
+            ]);
+
+            let lngRef = pegarValorPorChaves(meta, [
+                "GPSLongitudeRef",
+                "GpsLongitudeRef",
+                "longitudeRef",
+                "LongitudeRef"
+            ]);
+
+            if(lat !== null && lng !== null) {
+                let latConvertida = converterCoordenada(lat);
+                let lngConvertida = converterCoordenada(lng);
+
+                if(latRef && String(latRef).toUpperCase().includes("S")) {
+                    latConvertida = -Math.abs(latConvertida);
+                }
+
+                if(lngRef && String(lngRef).toUpperCase().includes("W")) {
+                    lngConvertida = -Math.abs(lngConvertida);
+                }
+
+                return {
+                    lat: latConvertida,
+                    lng: lngConvertida,
+                    origem: "metadata DJI"
+                };
+            }
+        } catch(e) {
+            console.log("Falha metadata completa", e);
+        }
+
+        return null;
+    }
+
+    async function tentarGPSPorTextoInterno(file) {
+        try {
+            const buffer = await file.arrayBuffer();
+            let texto = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+
+            let lat = extrairNumeroPorRegex(texto, [
+                /drone-dji:GPSLatitude="([^"]+)"/i,
+                /drone-dji:GpsLatitude="([^"]+)"/i,
+                /GPSLatitude="([^"]+)"/i,
+                /GpsLatitude="([^"]+)"/i,
+                /<drone-dji:GPSLatitude>([^<]+)<\/drone-dji:GPSLatitude>/i,
+                /<drone-dji:GpsLatitude>([^<]+)<\/drone-dji:GpsLatitude>/i
+            ]);
+
+            let lng = extrairNumeroPorRegex(texto, [
+                /drone-dji:GPSLongitude="([^"]+)"/i,
+                /drone-dji:GpsLongitude="([^"]+)"/i,
+                /drone-dji:GPSLongtitude="([^"]+)"/i,
+                /drone-dji:GpsLongtitude="([^"]+)"/i,
+                /GPSLongitude="([^"]+)"/i,
+                /GpsLongitude="([^"]+)"/i,
+                /GPSLongtitude="([^"]+)"/i,
+                /GpsLongtitude="([^"]+)"/i,
+                /<drone-dji:GPSLongitude>([^<]+)<\/drone-dji:GPSLongitude>/i,
+                /<drone-dji:GpsLongitude>([^<]+)<\/drone-dji:GpsLongitude>/i,
+                /<drone-dji:GPSLongtitude>([^<]+)<\/drone-dji:GPSLongtitude>/i,
+                /<drone-dji:GpsLongtitude>([^<]+)<\/drone-dji:GpsLongtitude>/i
+            ]);
+
+            if(lat !== null && lng !== null) {
+                let latConvertida = converterCoordenada(lat);
+                let lngConvertida = converterCoordenada(lng);
+
+                return {
+                    lat: latConvertida,
+                    lng: lngConvertida,
+                    origem: "texto interno DJI"
+                };
+            }
+        } catch(e) {
+            console.log("Falha texto interno", e);
+        }
+
+        return null;
+    }
+
+    function pegarValorPorChaves(obj, chaves) {
+        for(let chave of chaves) {
+            if(obj[chave] !== undefined && obj[chave] !== null) return obj[chave];
+        }
+
+        let lowerMap = {};
+        Object.keys(obj).forEach(k => lowerMap[k.toLowerCase()] = obj[k]);
+
+        for(let chave of chaves) {
+            let c = chave.toLowerCase();
+            if(lowerMap[c] !== undefined && lowerMap[c] !== null) return lowerMap[c];
+        }
+
+        return null;
+    }
+
+    function extrairNumeroPorRegex(texto, regexes) {
+        for(let r of regexes) {
+            let m = texto.match(r);
+            if(m && m[1]) return m[1];
+        }
+
+        return null;
+    }
+
+    function converterCoordenada(valor) {
+        if(valor === null || valor === undefined) return NaN;
+
+        if(typeof valor === "number") {
+            return valor;
+        }
+
+        if(Array.isArray(valor)) {
+            if(valor.length >= 3) {
+                let graus = converterCoordenada(valor[0]);
+                let minutos = converterCoordenada(valor[1]);
+                let segundos = converterCoordenada(valor[2]);
+
+                let sinal = graus < 0 ? -1 : 1;
+
+                return sinal * (Math.abs(graus) + minutos / 60 + segundos / 3600);
+            }
+
+            if(valor.length === 1) {
+                return converterCoordenada(valor[0]);
+            }
+        }
+
+        if(typeof valor === "object") {
+            if(valor.numerator !== undefined && valor.denominator !== undefined) {
+                return Number(valor.numerator) / Number(valor.denominator);
+            }
+
+            if(valor.num !== undefined && valor.den !== undefined) {
+                return Number(valor.num) / Number(valor.den);
+            }
+
+            if(valor.value !== undefined) {
+                return converterCoordenada(valor.value);
+            }
+
+            if(valor.description !== undefined) {
+                return converterCoordenada(valor.description);
+            }
+
+            return NaN;
+        }
+
+        if(typeof valor === "string") {
+            let v = valor.trim();
+
+            v = v.replace(",", ".");
+
+            let sinal = 1;
+
+            if(/[SWO]$/i.test(v)) sinal = -1;
+            if(/^[SWO]/i.test(v)) sinal = -1;
+
+            v = v.replace(/[NSEWO]/gi, "").trim();
+
+            let direto = Number(v);
+
+            if(!isNaN(direto)) {
+                return direto * sinal;
+            }
+
+            let partes = v.match(/-?\d+(\.\d+)?/g);
+
+            if(partes && partes.length >= 3) {
+                let graus = Number(partes[0]);
+                let minutos = Number(partes[1]);
+                let segundos = Number(partes[2]);
+
+                let sinalFinal = graus < 0 ? -1 : sinal;
+
+                return sinalFinal * (Math.abs(graus) + minutos / 60 + segundos / 3600);
+            }
+
+            if(partes && partes.length === 1) {
+                return Number(partes[0]) * sinal;
+            }
+        }
+
+        return NaN;
+    }
+
+    function comprimirFotoArquivoAsync(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const imgObj = new Image();
+
+                imgObj.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    const scaleSize = Math.min(1, MAX_WIDTH / imgObj.width);
+
+                    canvas.width = imgObj.width * scaleSize;
+                    canvas.height = imgObj.height * scaleSize;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                };
+
+                imgObj.onerror = function() {
+                    reject("Erro ao carregar imagem.");
+                };
+
+                imgObj.src = e.target.result;
+            };
+
+            reader.onerror = function() {
+                reject("Erro ao ler arquivo.");
+            };
+
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function importarMapaExtra(event) {
+        const file = event.target.files[0];
+
+        if(!file) return;
+
+        try {
+            const geojson = await shp(await file.arrayBuffer());
+
+            baseMapaGeoJSON = Array.isArray(geojson) ? geojson[0] : geojson;
+
+            camadaMapa.clearLayers();
+
+            camadaMapa.addData(baseMapaGeoJSON).setStyle({ 
+                color: '#fff', 
+                weight: 2, 
+                fillOpacity: 0.1 
+            });
+
+            map.fitBounds(camadaMapa.getBounds());
+
+            let btnMapa = document.getElementById('btnCarregarMapa');
+            btnMapa.innerHTML = "<span>✅</span><small>Mapa<br>Ativo</small>";
+            btnMapa.classList.remove('bg-dark');
+            btnMapa.classList.add('bg-green');
+
+            alert("✅ Mapa Extra Carregado com Sucesso!");
+        } catch(e) { 
+            alert("Erro ao ler SHP. Verifique se o arquivo está em .zip e contém os arquivos do shapefile."); 
+        }
+    }
+
+    function toggleEdicaoLocal() {
+        let isManual = document.getElementById('chkManual').checked;
+        let fCod = document.getElementById('fCod');
+        let fGleb = document.getElementById('fGleb');
+        let fSetor = document.getElementById('fSetor');
+        let fNome = document.getElementById('fNome');
+
+        if(isManual) {
+            fCod.readOnly = false; 
+            fCod.classList.remove('readonly');
+
+            fGleb.readOnly = false; 
+            fGleb.classList.remove('readonly');
+
+            fSetor.readOnly = false; 
+            fSetor.classList.remove('readonly');
+
+            fNome.readOnly = false; 
+            fNome.classList.remove('readonly');
+            
+            if(fCod.value === "-") fCod.value = "EXP";
+            if(fGleb.value === "-") fGleb.value = "";
+            if(fSetor.value === "-") fSetor.value = "";
+            if(fNome.value === "Área não mapeada") fNome.value = "";
+
+            fNome.focus();
+        } else {
+            fCod.readOnly = true; 
+            fCod.classList.add('readonly');
+
+            fGleb.readOnly = true; 
+            fGleb.classList.add('readonly');
+
+            fSetor.readOnly = true; 
+            fSetor.classList.add('readonly');
+
+            fNome.readOnly = true; 
+            fNome.classList.add('readonly');
+            
+            let lat = document.getElementById('modalForm').getAttribute('data-lat');
+            let lng = document.getElementById('modalForm').getAttribute('data-lng');
+            let info = encontrarLocalInteligente(lat, lng);
+
+            fCod.value = info.cod;
+            fGleb.value = info.gleba;
+            fSetor.value = info.setor;
+            fNome.value = info.nome;
+        }
+    }
+
+    function abrirForm(lat, lng, info) {
+        document.getElementById('chkManual').checked = false;
+
+        document.getElementById('fCod').readOnly = true; 
+        document.getElementById('fCod').classList.add('readonly');
+
+        document.getElementById('fGleb').readOnly = true; 
+        document.getElementById('fGleb').classList.add('readonly');
+
+        document.getElementById('fSetor').readOnly = true; 
+        document.getElementById('fSetor').classList.add('readonly');
+
+        document.getElementById('fNome').readOnly = true; 
+        document.getElementById('fNome').classList.add('readonly');
+
+        document.getElementById('fCod').value = info.cod;
+        document.getElementById('fNome').value = info.nome;
+        document.getElementById('fGleb').value = info.gleba;
+        document.getElementById('fSetor').value = info.setor;
+
+        // Resetar campos da árvore e deixar a opção "Viva" como padrão
+        document.getElementById('fEspecie').value = "";
+        document.getElementById('fDap').value = "";
+        document.getElementById('fAlt').value = "";
+        document.getElementById('fStatusArvore').value = "Viva";
+        document.getElementById('fDesc').value = "";
+
+        fotoBase64 = ""; 
+
+        document.getElementById('previewImg').src = "";
+        document.getElementById('previewImg').style.display = 'none';
+        
+        document.getElementById('modalForm').setAttribute('data-lat', lat);
+        document.getElementById('modalForm').setAttribute('data-lng', lng);
+        
+        document.getElementById('modalForm').style.display = 'flex';
+
+        toggleCampos();
+
+        if(info.cod === "-") {
+            document.getElementById('chkManual').checked = true;
+            toggleEdicaoLocal();
+        }
+    }
+
+    function previewFotoComprimida(event) {
+        const file = event.target.files[0];
+
+        if(!file) return;
+        
+        comprimirFotoArquivoAsync(file).then(base64 => {
+            fotoBase64 = base64;
+            const imgDisplay = document.getElementById('previewImg');
+            imgDisplay.src = fotoBase64;
+            imgDisplay.style.display = 'block';
+        });
+    }
+
+    function toggleCampos() {
+        const t = document.getElementById('fTipo').value;
+
+        document.getElementById('camposArvore').style.display = (t === 'Árvore Isolada' ? 'block' : 'none');
+        document.getElementById('camposGerais').style.display = (t === 'Árvore Isolada' ? 'none' : 'block');
+    }
+
+    function salvarPonto() {
+        let latSalvar = document.getElementById('modalForm').getAttribute('data-lat');
+        let lngSalvar = document.getElementById('modalForm').getAttribute('data-lng');
+        let tipoSelecionado = document.getElementById('fTipo').value;
+
+        const r = {
+            data: new Date().toLocaleString('pt-BR'),
+            fazenda: document.getElementById('fNome').value || "Não informada",
+            cod: document.getElementById('fCod').value || "-",
+            gleba: document.getElementById('fGleb').value || "-",
+            setor: document.getElementById('fSetor').value || "-",
+            tipo: tipoSelecionado,
+            detalhes: tipoSelecionado === 'Árvore Isolada' ? 
+                      `Espécie: ${document.getElementById('fEspecie').value} | DAP: ${document.getElementById('fDap').value}cm | Altura: ${document.getElementById('fAlt').value}m | Status: ${document.getElementById('fStatusArvore').value}` : 
+                      document.getElementById('fDesc').value,
+            lat: latSalvar,
+            lng: lngSalvar,
+            fotoReal: fotoBase64
+        };
+        
+        levantamentos.push(r);
+        
+        localStorage.setItem('ambiental_pontos_offline', JSON.stringify(levantamentos));
+        
+        renderizarPontosSalvos();
+        fecharModal();
+    }
+
+    function fecharModal() { 
+        document.getElementById('modalForm').style.display = 'none'; 
+    }
+
+    function limparSessao() {
+        if(confirm("⚠️ ATENÇÃO: Isso apagará todos os pontos do mapa atual do seu celular. Você já gerou o PDF e Excel? Deseja iniciar um levantamento novo?")) {
+            levantamentos = [];
+            localStorage.removeItem('ambiental_pontos_offline');
+            camadaPontos.clearLayers();
+        }
+    }
+
+    function baixarExcel() {
+        if(levantamentos.length === 0) {
+            return alert("Você precisa registrar ao menos um ponto!");
+        }
+        
+        let dadosParaExcel = levantamentos.map(r => {
+            return {
+                "Data": r.data, 
+                "Fazenda": r.fazenda, 
+                "Código": r.cod,
+                "Gleba": r.gleba, 
+                "Setor": r.setor || "-",
+                "Tipo": r.tipo, 
+                "Detalhes": r.detalhes, 
+                "Lat": r.lat, 
+                "Lng": r.lng, 
+                "Link Google Earth": `https://earth.google.com/web/search/${r.lat},${r.lng}`,
+                "Tem Foto": r.fotoReal ? "SIM" : "NÃO"
+            };
+        });
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dadosParaExcel), "Ambiental");
+        XLSX.writeFile(wb, "Relatorio_Ambiental.xlsx");
+    }
+
+    async function salvarHistoricoAmbiental(pdfBase64) {
+        let tituloDigitado = document.getElementById('inpTituloLaudo').value || 'LAUDO AMBIENTAL DE CAMPO';
+
+        let resumo = {
+            topografo: topografoAtual,
+            fazenda: levantamentos[0]?.fazenda || "Várias Áreas",
+            gleba: levantamentos[0]?.gleba || "S/N",
+            setor: levantamentos[0]?.setor || "-",
+            titulo: tituloDigitado,
+            data: new Date().toLocaleDateString('pt-BR'),
+            hora: new Date().toLocaleTimeString('pt-BR'),
+            qtdPontos: levantamentos.length,
+            timestamp: Date.now()
+        };
+
+        // Sobe o PDF para o Cloudinary e guarda só o link (leve). Se falhar, cai no base64.
+        if (navigator.onLine) {
+            try {
+                resumo.pdfUrl = await uploadPDFCloudinary(pdfBase64, tituloDigitado);
+            } catch(e) {
+                console.warn('Cloudinary falhou, usando base64:', e);
+                resumo.arquivoPDF = pdfBase64;
+            }
+        } else {
+            resumo.arquivoPDF = pdfBase64;  // offline: guarda base64 na fila e sobe depois
+        }
+
+        if(navigator.onLine) {
+            fetch(URL_BANCO, { 
+                method: "POST", 
+                body: JSON.stringify(resumo) 
+            })
+            .then(() => sincronizarFilaAmbiental())
+            .catch(() => colocarNaFilaAmbiental(resumo));
+        } else {
+            colocarNaFilaAmbiental(resumo);
+        }
+    }
+
+    function colocarNaFilaAmbiental(obj) {
+        let fila = JSON.parse(localStorage.getItem('fila_ambiental') || "[]");
+
+        fila.push(obj);
+
+        localStorage.setItem('fila_ambiental', JSON.stringify(fila));
+
+        alert("Modo Offline Ativo! O laudo PDF foi salvo e será enviado para o painel do Gestor assim que o celular conectar na internet.");
+    }
+
+    function sincronizarFilaAmbiental() {
+        let fila = JSON.parse(localStorage.getItem('fila_ambiental') || "[]");
+
+        if(fila.length > 0 && navigator.onLine) {
+            fetch(URL_BANCO, { 
+                method: "POST", 
+                body: JSON.stringify(fila[0]) 
+            })
+            .then(res => {
+                fila.shift();
+                localStorage.setItem('fila_ambiental', JSON.stringify(fila));
+                sincronizarFilaAmbiental();
+            })
+            .catch(e => console.log("Sem rede."));
+        }
+    }
+
+    window.addEventListener('online', sincronizarFilaAmbiental);
+
+    function gerarPDF() {
+        if(levantamentos.length === 0) {
+            return alert("Nenhum dado registrado para gerar o laudo.");
+        }
+
+        let tituloPDF = document.getElementById('inpTituloLaudo').value || 'LAUDO AMBIENTAL DE CAMPO';
+
+        let conteudo = [
+            {
+                text: tituloPDF.toUpperCase(),
+                style: 'header',
+                alignment: 'center',
+                margin: [0, 0, 0, 6]
+            },
+            {
+                text: 'Topógrafo: ' + topografoAtual,
+                alignment: 'center',
+                color: '#1a73e8',
+                bold: true,
+                margin: [0, 0, 0, 2]
+            },
+            {
+                text: 'Gerado em: ' + new Date().toLocaleString('pt-BR'),
+                alignment: 'center',
+                margin: [0, 0, 0, 18]
+            }
+        ];
+
+        levantamentos.forEach((r, index) => {
+            let detalhesTexto = [
+                { text: 'Fazenda: ', bold: true },
+                r.fazenda + ' ',
+                { text: '(Cód: ' + r.cod + ')', bold: true },
+                ' - Gleba: ' + r.gleba + ' - Setor: ' + (r.setor || "-") + '\n',
+
+                { text: 'Coordenadas: ', bold: true },
+                'Lat ' + r.lat + ', Lng ' + r.lng + '\n',
+
+                { text: 'Detalhes: ', bold: true },
+                r.detalhes
+            ];
+
+            let blocoOcorrencia = {
+                stack: [
+                    {
+                        canvas: [
+                            {
+                                type: 'rect',
+                                x: 0,
+                                y: 0,
+                                w: 515,
+                                h: 1,
+                                color: '#2e7d32'
+                            }
+                        ],
+                        margin: [0, 0, 0, 8]
+                    },
+
+                    {
+                        text: `Ocorrência #${index + 1} - ${r.tipo}`,
+                        style: 'subheader',
+                        margin: [0, 0, 0, 8]
+                    },
+
+                    {
+                        table: {
+                            widths: ['*'],
+                            body: [
+                                [
+                                    {
+                                        text: detalhesTexto,
+                                        margin: [10, 8, 10, 8],
+                                        fontSize: 10.5
+                                    }
+                                ]
+                            ]
+                        },
+                        layout: {
+                            fillColor: function () {
+                                return '#f7f9f7';
+                            },
+                            hLineColor: function () {
+                                return '#d6e5d6';
+                            },
+                            vLineColor: function () {
+                                return '#d6e5d6';
+                            }
+                        },
+                        margin: [0, 0, 0, 8]
+                    },
+
+                    {
+                        text: 'Abrir ponto no Google Earth',
+                        link: `https://earth.google.com/web/search/${r.lat},${r.lng}`,
+                        color: '#1a73e8',
+                        decoration: 'underline',
+                        fontSize: 10,
+                        margin: [0, 0, 0, 10]
+                    }
+                ],
+                margin: [0, index === 0 ? 0 : 12, 0, 14],
+                pageBreak: index === 0 ? undefined : 'before'
+            };
+
+            if(r.fotoReal) {
+                blocoOcorrencia.stack.push({
+                    image: r.fotoReal,
+                    fit: [460, 330],
+                    alignment: 'center',
+                    margin: [0, 4, 0, 6]
+                });
+            } else {
+                blocoOcorrencia.stack.push({
+                    text: '[ Levantamento sem registro fotográfico ]',
+                    italics: true,
+                    alignment: 'center',
+                    margin: [0, 12, 0, 12],
+                    color: '#666'
+                });
+            }
+
+            conteudo.push(blocoOcorrencia);
+        });
+
+        let docDefinition = {
+            pageSize: 'A4',
+            pageMargins: [40, 38, 40, 45],
+
+            content: conteudo,
+
+            footer: function(currentPage, pageCount) {
+                return {
+                    text: 'Página ' + currentPage + ' de ' + pageCount,
+                    alignment: 'center',
+                    fontSize: 9,
+                    color: '#777',
+                    margin: [0, 8, 0, 0]
+                };
+            },
+
+            styles: {
+                header: {
+                    fontSize: 17,
+                    bold: true,
+                    color: '#1b5e20'
+                },
+                subheader: {
+                    fontSize: 13,
+                    bold: true,
+                    color: '#2e7d32'
+                }
+            },
+
+            defaultStyle: {
+                fontSize: 10
+            }
+        };
+
+        const docGerador = pdfMake.createPdf(docDefinition);
+
+        let nomeArquivoFinal = document.getElementById('inpTituloLaudo').value || 'Laudo_Ambiental_TopoMap';
+        nomeArquivoFinal = nomeArquivoFinal.replace(/[^a-z0-9]/gi, '_');
+
+        docGerador.download(nomeArquivoFinal + '.pdf');
+        
+        docGerador.getBase64((base64) => { 
+            salvarHistoricoAmbiental(base64); 
+        });
+    }
+</script>
+</body>
+</html>
