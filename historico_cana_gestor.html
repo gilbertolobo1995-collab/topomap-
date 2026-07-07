@@ -570,17 +570,32 @@
     }
 
     // ---------- PDF ----------
-    function baixarPDF(i) {
-        const d = dadosFiltrados[i];
-        // Preferência: link do Firebase Storage (leve). Compatível com base64 antigo.
-        if (d.pdfUrl) { window.open(d.pdfUrl, '_blank'); return; }
-        if (!d.arquivoPDF) { toast("Este relatório não possui PDF anexado.", 'erro'); return; }
+function baixarPDF(i) {
+    const d = dadosFiltrados[i];
+    if (d.pdfUrl) {
+        let url = d.pdfUrl;
+        if (url.includes('cloudinary.com')) {
+            url = url.replace('/upload/', '/upload/fl_attachment/');
+        }
         const link = document.createElement("a");
-        link.href = `data:application/pdf;base64,${d.arquivoPDF}`;
-        const nome = `Monitoramento_Planta_${d.fazenda}`.replace(/[^a-z0-9]/gi, '_');
-        link.download = `${nome}_${formatarData(parseData(d.data, d.timestamp)).replace(/\//g, '-')}.pdf`;
+        link.href = url;
+        link.target = '_blank';
+        link.download = '';
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
+        return;
     }
+    if (!d.arquivoPDF) { toast("Este relatório não possui PDF anexado.", 'erro'); return; }
+    const link = document.createElement("a");
+    link.href = `data:application/pdf;base64,${d.arquivoPDF}`;
+    const baseNome = d.titulo || `Monitoramento_Planta_${d.fazenda}`;
+    const dataStr = formatarData(parseData(d.data, d.timestamp)).replace(/\//g, '-');
+    link.download = `${baseNome.replace(/[^a-z0-9]/gi, '_')}_${dataStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
     // ---------- Colunas de exportação ----------
     const COLS = [
@@ -726,5 +741,5 @@
     });
     window.onload = carregarHistorico;
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17366b9d8b86e54',t:'MTc4MzM5MTE1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

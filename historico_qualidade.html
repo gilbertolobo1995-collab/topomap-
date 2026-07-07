@@ -483,20 +483,37 @@
         return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
-    function baixarPDF(i) {
-        const d = dadosFiltrados[i];
-        if (d.pdfUrl) { window.open(d.pdfUrl, '_blank'); return; }
-        if (!d.arquivoPDF) { toast("Este relatório foi salvo sem PDF anexado.", 'erro'); return; }
+function baixarPDF(i) {
+    const d = dadosFiltrados[i];
+    if (d.pdfUrl) {
+        let url = d.pdfUrl;
+        if (url.includes('cloudinary.com')) {
+            url = url.replace('/upload/', '/upload/fl_attachment/');
+        }
         const link = document.createElement("a");
-        link.href = `data:application/pdf;base64,${d.arquivoPDF}`;
-        link.download = `Relatorio_Qualidade_${esc(d.fazenda)}_G${esc(d.gleba)}_${formatarData(parseData(d.data, d.timestamp)).replace(/\//g, '-')}.pdf`;
+        link.href = url;
+        link.target = '_blank';
+        link.download = '';
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
+        return;
     }
+    if (!d.arquivoPDF) { toast("Este relatório foi salvo sem PDF anexado.", 'erro'); return; }
+    const link = document.createElement("a");
+    link.href = `data:application/pdf;base64,${d.arquivoPDF}`;
+    const baseNome = d.titulo || `Relatorio_Qualidade_${d.fazenda}`;
+    const dataStr = formatarData(parseData(d.data, d.timestamp)).replace(/\//g, '-');
+    link.download = `${baseNome.replace(/[^a-z0-9]/gi, '_')}_${dataStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
     ['fBusca','fFazenda','fTopografo','fStatus','fDe','fAte','fOrdenar','fDirecao'].forEach(id => {
         document.getElementById(id).addEventListener('input', aplicarFiltros);
     });
     window.onload = carregarHistorico;
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a17368b17f666e54',t:'MTc4MzM5MTIzNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
